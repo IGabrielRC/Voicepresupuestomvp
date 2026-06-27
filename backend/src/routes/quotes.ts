@@ -1,0 +1,153 @@
+import { Router, Request, Response } from 'express';
+import { env } from '../lib/env.js';
+import { supabase } from '../lib/supabase.js';
+import { sendMessage } from '../services/telegram.js';
+
+export const quotesRouter = Router();
+
+async function loadQuote(id: string) {
+  const { data, error } = await supabase
+    .from('quotes')
+    .select('*, quote_items(*)')
+    .eq('id', id)
+    .single();
+  if (error || !data) return null;
+  return data;
+}
+
+quotesRouter.get('/quotes/:id', async (req: Request, res: Response) => {
+  const data = await loadQuote(req.params.id);
+  if (!data) return res.status(404).json({ error: 'not_found' });
+  res.json({ quote: data, items: data.quote_items });
+});
+
+quotesRouter.patch('/quotes/:id', async (req: Request, res: Response) => {
+  // Lock once accepted: prevent silent edits after the client signed off.
+  const { data: current } = await supabase
+    .from('quotes')
+    .select('client_response, status')
+    .eq('id', req.params.id)
+    .single();
+  if (current?.client_response === 'accepted') {
+    return res.status(403).json({
+      error: 'quote_locked',
+      message: 'Este presupuesto ya fue aceptado por el cliente. Creá uno nuevo si necesitás hacer cambios.',
+    });
+  }
+
+  const { client_name, client_contact, currency, notes, terms, validity_days, items } = req.body;
+
+  let expires_at: string | null = null;
+  if (validity_days) {
+    expires_at = new Date(Date.now() + Number(validity_days) * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  const { error: uErr } = await supabase
+    .from('quotes')
+    .update({ client_name, client_contact, currency, notes, terms, validity_days, expires_at })
+    .eq('id', req.params.id);
+  if (uErr) return res.status(500).json({ error: uErr.message });
+
+  // Replace items (simple and correct for MVP).
+  await supabase.from('quote_items').delete().eq('quote_id', req.params.id);
+  if (Array.isArray(items) && items.length > 0) {
+    const rows = items.map((it: any, i: number) => ({
+      quote_id: req.params.id,
+      description: it.description,
+      qty: it.qty,
+      unit_price: it.unit_price,
+      line_total: it.qty && it.unit_price ? Number(it.qty) * Number(it.unit_price) : 0,
+      sort_order: it.sort_order ?? i,
+    }));
+    const { error: iErr } = await supabase.from('quote_items').insert(rows);
+    if (iErr) return res.status(500).json({ error: iErr.message });
+  }
+
+  const data = await loadQuote(req.params.id);
+  res.json({ quote: data, items: data?.quote_items || [] });
+});
+
+quotesRouter.get('/quotes/slug/:slug', async (req: Request, res: Response) => {
+  const { data, error } = await supabase
+    .from('quotes')
+    .select('*, quote_items(*)')
+    .eq('slug', req.params.slug)
+    .single();
+  if (error || !data) return res.status(404).json({ error: 'not_found' });
+  res.json({ quote: data, items: data.quote_items });
+});
+
+quotesRouter.post('/quotes/:id/share', async (req: Request, res: Response) => {
+  const { data, error } = await supabase
+    .from('quotes')
+    .update({ status: 'shared' })
+    .eq('id', req.params.id)
+    .select('slug, id')
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  const public_url = `${env.WEB_BASE_URL}/s/${data.slug}`;
+  res.json({ public_url, slug: data.slug, id: data.id });
+});
+
+// Delete a quote. Items cascade (FK ON DELETE CASCADE).
+quotesRouter.delete('/quotes/:id', async (req: Request, res: Response) => {
+  const { error } = await supabase.from('quotes').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+// Client response: accept / reject / request changes. Public endpoint (no auth for MVP).
+// Notifies the contractor via Telegram.
+quotesRouter.post('/quotes/slug/:slug/respond', async (req: Request, res: Response) => {
+  const { response } = req.body || {};
+  if (!['accepted', 'rejected', 'changes_requested'].includes(response)) {
+    return res.status(400).json({ error: 'invalid_response' });
+  }
+
+  // Fetch quote with contractor's telegram_user_id (via FK join).
+  const { data: quote, error: qErr } = await supabase
+    .from('quotes')
+    .select('id, contractor_id, client_name, slug, contractors(telegram_user_id)')
+    .eq('slug', req.params.slug)
+    .single();
+  if (qErr || !quote) return res.status(404).json({ error: 'not_found' });
+
+  const { error: uErr } = await supabase
+    .from('quotes')
+    .update({ client_response: response })
+    .eq('id', quote.id);
+  if (uErr) return res.status(500).json({ error: uErr.message });
+
+  // Notify contractor via Telegram (best-effort, don't fail the request if it fails).
+  const telegramUserId = (quote as any).contractors?.telegram_user_id;
+  if (telegramUserId) {
+    const labels: Record<string, string> = {
+      accepted: '✅ ACEPTÓ',
+      rejected: '❌ RECHAZÓ',
+      changes_requested: '💬 PIDIÓ CAMBIOS en',
+    };
+    const verb = labels[response];
+    const clientName = quote.client_name || 'tu cliente';
+    const editUrl = `${env.WEB_BASE_URL}/q/${quote.id}`;
+    try {
+      await sendMessage(
+        telegramUserId,
+        `${verb} tu presupuesto, <b>${escapeHtml(clientName)}</b>.\n\nTocá un botón:`,
+        {
+          inline_keyboard: [
+            [{ text: '📝 Ver y editar', url: editUrl }],
+            [{ text: '➕ Crear nuevo', url: `${env.WEB_BASE_URL}/` }],
+          ],
+        }
+      );
+    } catch (e) {
+      console.error('[respond] telegram notify failed', e);
+    }
+  }
+
+  res.json({ ok: true, response });
+});
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
