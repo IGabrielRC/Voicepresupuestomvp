@@ -378,7 +378,6 @@ export default function PublicQuote({ slug }: { slug: string }) {
               </p>
             )}
           </div>
-        </div>
         </Card>
       </div>
 
