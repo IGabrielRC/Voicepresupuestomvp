@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Save, Loader2, Check, Sparkles } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Save, Loader2, Check, Sparkles, Upload, X } from 'lucide-react';
 import { api } from '../lib/api';
 import type { ContractorProfile } from '../lib/types';
 
@@ -19,6 +19,87 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const MAX_LOGO_BYTES = 1024 * 1024;
+  const MAX_LOGO_URL_LENGTH = 2048;
+  const ALLOWED_IMAGE_MIME_TYPES = new Set([
+    'image/png',
+    'image/jpeg',
+    'image/webp',
+    'image/gif',
+    'image/svg+xml',
+  ]);
+
+  function isSafeSvg(svgText: string): boolean {
+    const lower = svgText.toLowerCase();
+    if (lower.includes('<script')) return false;
+    if (lower.includes('javascript:')) return false;
+    if (/\bon\w+\s*=/i.test(lower)) return false;
+    return true;
+  }
+
+  function validateLogoUrl(value: string): string | null {
+    if (!value) return null;
+    if (value.length > MAX_LOGO_URL_LENGTH)
+      return `El enlace supera ${MAX_LOGO_URL_LENGTH} caracteres.`;
+    if (/^https?:\/\//i.test(value)) return null;
+    if (value.startsWith('data:')) {
+      const commaIdx = value.indexOf(',');
+      if (commaIdx === -1) return 'URL de datos inválida.';
+      const meta = value.slice(5, commaIdx);
+      const base64 = value.slice(commaIdx + 1);
+      const parts = meta.split(';');
+      const mimeType = parts[0].toLowerCase();
+      if (!parts.includes('base64')) return 'La URL de datos debe ser base64.';
+      if (!mimeType.startsWith('image/')) return 'El archivo debe ser una imagen.';
+      if (!ALLOWED_IMAGE_MIME_TYPES.has(mimeType)) return 'Formato de imagen no permitido.';
+      try {
+        const decoded = atob(base64);
+        if (decoded.length > MAX_LOGO_BYTES) return 'La imagen no puede superar 1 MB.';
+        if (mimeType === 'image/svg+xml' && !isSafeSvg(decoded)) {
+          return 'El SVG contiene contenido no seguro.';
+        }
+      } catch {
+        return 'Base64 inválido.';
+      }
+      return null;
+    }
+    return 'El enlace debe ser http, https o una imagen en base64.';
+  }
+
+  function setLogoUrl(value: string) {
+    setLogoError(validateLogoUrl(value));
+    setProfile((p) => ({ ...p, logo_url: value }));
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    setLogoError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setLogoError('El archivo debe ser una imagen (JPG, PNG, WEBP, etc).');
+      return;
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      setLogoError('La imagen no puede superar 1 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      setLogoUrl(result);
+    };
+    reader.onerror = () => setLogoError('No se pudo leer la imagen.');
+    reader.readAsDataURL(file);
+  }
+
+  function clearLogo() {
+    setLogoError(null);
+    setProfile((p) => ({ ...p, logo_url: '' }));
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
 
   useEffect(() => {
     api
@@ -34,6 +115,11 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
   }, [contractorId]);
 
   async function save() {
+    const logoErr = validateLogoUrl(profile.logo_url || '');
+    if (logoErr) {
+      setLogoError(logoErr);
+      return;
+    }
     setSaving(true);
     setSaved(false);
     setError(null);
@@ -127,7 +213,65 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
 
         <section className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
           {field('business_name', 'Nombre de tu empresa')}
-          {field('logo_url', 'URL del logo (opcional)')}
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-2">
+              Logo de la empresa
+            </label>
+            <div className="flex items-center gap-4">
+              {profile.logo_url ? (
+                <div className="relative group">
+                  <img
+                    src={profile.logo_url}
+                    alt="Vista previa del logo"
+                    className="w-16 h-16 rounded-xl object-cover ring-1 ring-slate-200 bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={clearLogo}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-slate-800 text-white flex items-center justify-center shadow-sm hover:bg-slate-700"
+                    aria-label="Quitar logo"
+                    title="Quitar logo"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-16 h-16 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-xs text-center px-2">
+                  Sin logo
+                </div>
+              )}
+              <div className="flex-1 space-y-2">
+                <input
+                  type="text"
+                  value={profile.logo_url || ''}
+                  onChange={(e) => setLogoUrl(e.target.value)}
+                  placeholder="https://ejemplo.com/logo.png"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    id="logo-upload"
+                  />
+                  <label
+                    htmlFor="logo-upload"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Subir imagen
+                  </label>
+                  <span className="text-xs text-slate-400">Máx. 1 MB</span>
+                </div>
+                {logoError && <p className="text-xs text-red-600">{logoError}</p>}
+              </div>
+            </div>
+          </div>
+
           {field('contact_phone', 'Teléfono')}
           {field('contact_email', 'Email', 'email')}
           {field('address', 'Dirección')}

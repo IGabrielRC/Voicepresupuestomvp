@@ -147,7 +147,7 @@ export default function PublicQuote({ slug }: { slug: string }) {
   const canRespond = quote.status === 'shared' && response === 'pending' && !expired;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-indigo-50/30 py-8 px-4 sm:px-6 pb-32">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-indigo-50/30 py-8 px-4 sm:px-6 pb-[calc(12rem+env(safe-area-inset-bottom))]">
       <div className="max-w-3xl mx-auto">
         {/* Status pill */}
         <div className="flex justify-end mb-4">
@@ -384,7 +384,7 @@ export default function PublicQuote({ slug }: { slug: string }) {
       {/* Sticky response buttons — premium mobile UX */}
       {canRespond && (
         <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_24px_rgba(0,0,0,0.08)]">
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-5 space-y-2">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-5 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.25rem+env(safe-area-inset-bottom))] space-y-2">
             {/* Primary action: Accept. Big, gradient, shadow. */}
             <Button
               onClick={() => respond('accepted')}
@@ -439,7 +439,7 @@ export default function PublicQuote({ slug }: { slug: string }) {
       {/* Thank you state — premium empty/positive feedback */}
       {response !== 'pending' && quote.status === 'shared' && (
         <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_24px_rgba(0,0,0,0.08)]">
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 text-center">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:pb-[calc(2rem+env(safe-area-inset-bottom))] text-center">
             <div className="text-5xl mb-3">{responseInfo.emoji}</div>
             <p className={cn('text-lg font-semibold', responseInfo.color)}>
               {response === 'accepted' && '¡Gracias por aceptar!'}
