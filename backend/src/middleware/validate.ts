@@ -5,7 +5,7 @@ const MAX_NAME = 200;
 const MAX_NOTES = 5000;
 const MAX_DESCRIPTION = 500;
 const MAX_ITEMS = 100;
-const ALLOWED_CURRENCIES = new Set(['USD', 'ARS', 'EUR', 'MXN', 'CLP', 'COP', 'BRL', 'PEN']);
+const ALLOWED_CURRENCIES = new Set(['USD', 'VES', 'ARS', 'EUR', 'MXN', 'COP', 'BRL']);
 
 export function validatePatchQuoteBody(body: any): string | null {
   if (!body || typeof body !== 'object') return 'body inválido';

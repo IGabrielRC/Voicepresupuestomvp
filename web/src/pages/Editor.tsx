@@ -459,9 +459,13 @@ export default function Editor({ quoteId }: { quoteId: string }) {
                 disabled={locked}
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
               >
-                <option value="ARS">ARS (pesos)</option>
                 <option value="USD">USD (dólares)</option>
+                <option value="VES">VES (bolívares)</option>
+                <option value="ARS">ARS (pesos argentinos)</option>
                 <option value="EUR">EUR (euros)</option>
+                <option value="MXN">MXN (pesos mexicanos)</option>
+                <option value="COP">COP (pesos colombianos)</option>
+                <option value="BRL">BRL (reales)</option>
               </select>
             </div>
             <div>

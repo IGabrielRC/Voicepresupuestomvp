@@ -27,7 +27,7 @@ Devolvé EXCLUSIVAMENTE un JSON válido con este schema (sin markdown, sin \`\`\
 {
   "client_name": string | null,
   "client_contact": string | null,
-  "currency": "USD" (o "ARS" si el contratista lo aclara; por defecto "USD"),
+  "currency": "USD" (o "VES" / "ARS" / "EUR" si el contratista lo aclara; por defecto "USD"),
   "notes": string | null,
   "terms": string | null,
   "items": [
