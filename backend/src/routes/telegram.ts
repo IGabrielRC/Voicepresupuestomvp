@@ -12,6 +12,7 @@ import {
   type InlineButton,
 } from '../services/telegram.js';
 import { newSlug } from '../services/slug.js';
+import { checkAudioRateLimit } from '../middleware/rateLimit.js';
 
 export const telegramRouter = Router();
 
@@ -60,6 +61,15 @@ async function handleUpdate(update: any) {
 
   const fileId = msg.voice?.file_id || msg.audio?.file_id;
   if (!fileId) return;
+
+  // Rate limit: max 1 audio every 5s per user. Prevents Gemini bill abuse.
+  if (!checkAudioRateLimit(telegramUserId)) {
+    await sendMessage(
+      chatId,
+      `⏱️ <b>Esperá unos segundos entre audios.</b>\n\nEsto es para evitar abuso y mantener el servicio estable para todos.`
+    ).catch(() => {});
+    return;
+  }
 
   await handleVoiceNote(chatId, telegramUserId, isVoice, msg, fileId);
 }

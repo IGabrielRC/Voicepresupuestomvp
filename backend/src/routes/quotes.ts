@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { env } from '../lib/env.js';
 import { supabase } from '../lib/supabase.js';
 import { sendMessage } from '../services/telegram.js';
+import { checkPatchRateLimit } from '../middleware/rateLimit.js';
+import { validatePatchQuoteBody } from '../middleware/validate.js';
 
 export const quotesRouter = Router();
 
@@ -22,6 +24,18 @@ quotesRouter.get('/quotes/:id', async (req: Request, res: Response) => {
 });
 
 quotesRouter.patch('/quotes/:id', async (req: Request, res: Response) => {
+  // Rate limit: max 1 PATCH per second per IP. Prevents runaway auto-save loops.
+  const ip = (req.ip || req.socket.remoteAddress || 'unknown').toString();
+  if (!checkPatchRateLimit(ip)) {
+    return res.status(429).json({ error: 'too_many_requests' });
+  }
+
+  // Input validation: reject malformed bodies early.
+  const validationError = validatePatchQuoteBody(req.body);
+  if (validationError) {
+    return res.status(400).json({ error: 'invalid_input', message: validationError });
+  }
+
   // Lock once accepted: prevent silent edits after the client signed off.
   const { data: current } = await supabase
     .from('quotes')

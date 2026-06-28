@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Lock,
   MoreVertical,
+  Send,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import type { Quote, QuoteItem, ClientResponse } from '../lib/types';
@@ -187,7 +188,20 @@ export default function Editor({ quoteId }: { quoteId: string }) {
               <Button variant="outline" onClick={() => (window.location.href = '/')}>
                 Volver al inicio
               </Button>
+              <Button
+                onClick={() =>
+                  window.open('https://t.me/presupuestomvp_bot', '_blank')
+                }
+                className="bg-sky-500 hover:bg-sky-600 text-white"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Crear otro desde Telegram
+              </Button>
             </div>
+            <p className="mt-5 text-xs text-slate-400">
+              Tu bot está en <span className="font-mono">@presupuestomvp_bot</span>. Mandale
+              una nota de voz con el nuevo presupuesto.
+            </p>
           </CardContent>
         </Card>
       </div>
