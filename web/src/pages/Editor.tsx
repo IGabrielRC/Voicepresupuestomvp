@@ -223,13 +223,13 @@ export default function Editor({ quoteId }: { quoteId: string }) {
   const total = items.reduce((s, it) => s + (it.line_total || 0), 0);
 
   const inputBase =
-    'w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed';
+    'w-full px-3 py-2 rounded-lg border border-slate-200/60 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-colors disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed';
 
   return (
     <div className="min-h-screen pb-24">
-      <div className="sticky top-0 z-10 bg-white border-b border-slate-200">
+      <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-slate-200/60">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
-          <a href="/" className="text-sm text-slate-500 hover:text-slate-900">
+          <a href="/" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">
             ← Inicio
           </a>
           <div className="flex items-center gap-2">
@@ -305,7 +305,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         {quote.client_response && quote.client_response !== 'pending' && (
           <div
-            className={`rounded-xl border p-4 flex items-center gap-3 ${
+            className={`rounded-xl border p-4 flex items-center gap-3 transition-colors ${
               RESPONSE_BADGE[quote.client_response].className
             }`}
           >
@@ -313,7 +313,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
               const Icon = RESPONSE_BADGE[quote.client_response].icon;
               return <Icon className="w-5 h-5 flex-shrink-0" />;
             })()}
-            <p className="font-medium">{RESPONSE_BADGE[quote.client_response].label}</p>
+            <p className="font-medium tracking-tight">{RESPONSE_BADGE[quote.client_response].label}</p>
           </div>
         )}
 
@@ -323,7 +323,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
           onChange={(e) => setQuote({ ...quote, client_name: e.target.value })}
           placeholder="Nombre del cliente"
           disabled={locked}
-          className="w-full text-3xl sm:text-4xl font-bold tracking-tight bg-transparent border-none focus:outline-none focus:ring-0 placeholder:text-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed"
+          className="w-full text-3xl sm:text-4xl font-semibold tracking-[-0.03em] bg-transparent border-none focus:outline-none focus:ring-0 placeholder:text-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
         />
 
         <section className="bg-white rounded-xl border border-slate-200 p-5">
@@ -438,10 +438,12 @@ export default function Editor({ quoteId }: { quoteId: string }) {
             </div>
           )}
 
-          <div className="mt-5 pt-5 border-t border-slate-200 flex justify-end">
+          <div className="mt-5 pt-5 border-t border-slate-200/60 flex justify-end">
             <div className="text-right">
-              <p className="text-xs text-slate-500 uppercase tracking-wide">Total</p>
-              <p className="text-2xl font-bold text-slate-900">
+              <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">
+                Total
+              </p>
+              <p className="text-2xl font-semibold text-slate-900 tabular-nums">
                 {formatCurrency(total, quote.currency)}
               </p>
             </div>
@@ -457,7 +459,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
                 value={quote.currency}
                 onChange={(e) => setQuote({ ...quote, currency: e.target.value })}
                 disabled={locked}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
+                className="w-full px-3 py-2 rounded-lg border border-slate-200/60 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 bg-white transition-colors disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
               >
                 <option value="USD">USD (dólares)</option>
                 <option value="VES">VES (bolívares)</option>
@@ -493,7 +495,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
               onChange={(e) => setQuote({ ...quote, terms: e.target.value })}
               rows={3}
               disabled={locked}
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
+              className={inputBase}
             />
           </div>
           <div className="mt-4">
@@ -503,7 +505,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
               onChange={(e) => setQuote({ ...quote, notes: e.target.value })}
               rows={2}
               disabled={locked}
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
+              className={inputBase}
             />
           </div>
         </section>

@@ -369,8 +369,8 @@ export default function PublicQuote({ slug }: { slug: string }) {
           )}
 
           {/* Footer */}
-          <div className="px-6 sm:px-10 py-7 bg-gradient-to-br from-slate-900 to-slate-800 text-slate-300 text-sm text-center">
-            <p className="font-semibold text-white text-base">Gracias por su confianza.</p>
+          <div className="px-6 sm:px-10 py-7 bg-slate-900 text-slate-300 text-sm text-center">
+            <p className="font-semibold text-white text-base tracking-tight">Gracias por su confianza.</p>
             {profile?.address && (
               <p className="mt-2 text-slate-400 inline-flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5" />
@@ -378,6 +378,7 @@ export default function PublicQuote({ slug }: { slug: string }) {
               </p>
             )}
           </div>
+        </div>
         </Card>
       </div>
 
