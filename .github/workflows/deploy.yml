@@ -1,0 +1,59 @@
+name: Deploy to Easypanel VPS
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  APP_DIR: /opt/voicequote-source
+  REPO_URL: https://github.com/IGabrielRC/Voicepresupuestomvp.git
+  BACKEND_IMAGE: easypanel/presupuesto_mvp/presupuesto_back:latest
+  FRONTEND_IMAGE: easypanel/presupuesto_mvp/presupuesto_front:latest
+  BACKEND_SERVICE: presupuesto_mvp_presupuesto_back
+  FRONTEND_SERVICE: presupuesto_mvp_presupuesto_front
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          APP_DIR: ${{ env.APP_DIR }}
+          REPO_URL: ${{ env.REPO_URL }}
+          BACKEND_IMAGE: ${{ env.BACKEND_IMAGE }}
+          FRONTEND_IMAGE: ${{ env.FRONTEND_IMAGE }}
+          BACKEND_SERVICE: ${{ env.BACKEND_SERVICE }}
+          FRONTEND_SERVICE: ${{ env.FRONTEND_SERVICE }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          fingerprint: SHA256:cyDRIhuBU4RAAVa8m7YOUkjivcfkDy3MggLYoxGI/Yg
+          envs: APP_DIR,REPO_URL,BACKEND_IMAGE,FRONTEND_IMAGE,BACKEND_SERVICE,FRONTEND_SERVICE,VITE_API_URL
+          script: |
+            set -euo pipefail
+
+            if [ -z "$VITE_API_URL" ]; then
+              echo "VITE_API_URL GitHub secret is required"
+              exit 1
+            fi
+
+            mkdir -p "$APP_DIR"
+            if [ ! -d "$APP_DIR/.git" ]; then
+              git clone "$REPO_URL" "$APP_DIR"
+            fi
+
+            cd "$APP_DIR"
+            git fetch origin main
+            git reset --hard origin/main
+
+            docker build -t "$BACKEND_IMAGE" -f Dockerfile.backend .
+            docker build -t "$FRONTEND_IMAGE" -f Dockerfile.web --build-arg VITE_API_URL="$VITE_API_URL" .
+
+            docker service update --force --image "$BACKEND_IMAGE" "$BACKEND_SERVICE"
+            docker service update --force --image "$FRONTEND_IMAGE" "$FRONTEND_SERVICE"
