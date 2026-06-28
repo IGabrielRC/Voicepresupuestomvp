@@ -6,6 +6,8 @@ ENV VITE_API_URL=$VITE_API_URL
 COPY web/package*.json ./
 COPY web/tsconfig.json ./
 COPY web/tsconfig.node.json ./
+COPY web/tailwind.config.js ./
+COPY web/postcss.config.js ./
 COPY web/vite.config.ts ./
 COPY web/index.html ./
 RUN npm ci
