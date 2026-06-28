@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, Loader2, Check } from 'lucide-react';
+import { Save, Loader2, Check, Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 import type { ContractorProfile } from '../lib/types';
 
@@ -13,6 +13,8 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
     terms: '',
     default_currency: 'USD',
   });
+  const welcome = new URLSearchParams(window.location.search).get('welcome') === '1';
+  const hasProfile = !!profile.business_name;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -96,9 +98,28 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
         </div>
       </div>
 
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
-        <h1 className="text-2xl font-bold text-slate-900 mb-1">Mi perfil</h1>
-        <p className="text-sm text-slate-600 mb-6">
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+        {welcome && !hasProfile && (
+          <div className="mb-8 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-6 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">¡Bienvenido a VoiceQuote!</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Configurá tu perfil con los datos de tu empresa. Después cada
+                  presupuesto que generes se va a ver profesional con tu nombre,
+                  logo y contacto.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight mb-1">
+          Mi perfil
+        </h1>
+        <p className="text-sm text-slate-600 mb-8">
           Aparece en cada presupuesto que compartís con tus clientes.
         </p>
 

@@ -361,6 +361,28 @@ async function handleVoiceNote(
     } else {
       await sendMessage(chatId, responseText, replyMarkup).catch(() => {});
     }
+
+    // Onboarding: if the contractor doesn't have a profile yet, send them a
+    // setup link as a follow-up message. This only fires on the first quote
+    // (subsequent quotes have a profile).
+    const { data: existingProfile } = await supabase
+      .from('contractor_profiles')
+      .select('business_name')
+      .eq('contractor_id', contractorId)
+      .maybeSingle();
+
+    if (!existingProfile?.business_name) {
+      const profileUrl = `${WEB_URL}/p/${contractorId}?welcome=1`;
+      await sendMessage(
+        chatId,
+        `👤 <b>Mientras tanto, completá tu perfil</b> para que tus presupuestos se vean profesionales (con tu nombre de empresa, logo y contacto).\n\nTocá el botón:`,
+        {
+          inline_keyboard: [
+            [{ text: '👤 Configurar mi perfil', url: profileUrl }],
+          ],
+        }
+      ).catch(() => {});
+    }
   } catch (e) {
     console.error('[telegram] handleUpdate error', e);
     if (processingMsg?.message_id) {
