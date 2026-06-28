@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Sparkles,
   ArrowRight,
+  AlertCircle,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import VoiceRecorder from '../components/VoiceRecorder';
@@ -87,7 +88,12 @@ export default function Landing() {
               Grabar nota de voz
             </Button>
           </div>
-          {error && <p className="mt-4 text-sm text-red-600 max-w-md mx-auto">{error}</p>}
+          {error && (
+            <div className="mt-4 mx-auto max-w-md flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-left">
+              <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700 leading-relaxed">{error}</p>
+            </div>
+          )}
           <p className="mt-3 text-xs text-slate-500">
             Sin registro. Sin tarjeta. Probá ahora.
           </p>

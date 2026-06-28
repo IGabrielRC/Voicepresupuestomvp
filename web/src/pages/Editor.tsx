@@ -209,11 +209,16 @@ export default function Editor({ quoteId }: { quoteId: string }) {
   }
   if (error || !quote) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-8">
-        <div className="text-center">
-          <p className="text-red-600">{error || 'Presupuesto no encontrado.'}</p>
-          <a href="/" className="text-indigo-600 hover:underline mt-4 inline-block">
-            ← Volver
+      <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-slate-100/30 flex items-center justify-center p-8">
+        <div className="text-center max-w-md">
+          <p className="text-slate-700 leading-relaxed">
+            {error || 'Presupuesto no encontrado.'}
+          </p>
+          <a
+            href="/"
+            className="text-slate-900 font-medium hover:underline mt-4 inline-block"
+          >
+            ← Volver al inicio
           </a>
         </div>
       </div>
@@ -279,7 +284,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
                 <button
                   onClick={() => save(false)}
                   disabled={saving}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors"
                 >
                   {saving ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -381,7 +386,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
                     onChange={(e) => updateItem(i, { description: e.target.value })}
                     placeholder="Descripción"
                     disabled={locked}
-                    className="col-span-12 sm:col-span-6 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
+                    className="col-span-12 sm:col-span-6 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
                   />
                   <input
                     type="number"
@@ -393,7 +398,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
                     }}
                     placeholder="Cant."
                     disabled={locked}
-                    className="col-span-3 sm:col-span-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
+                    className="col-span-3 sm:col-span-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
                   />
                   <input
                     type="number"
@@ -405,7 +410,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
                     }}
                     placeholder="Precio"
                     disabled={locked}
-                    className="col-span-4 sm:col-span-2 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
+                    className="col-span-4 sm:col-span-2 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
                   />
                   <div className="col-span-3 sm:col-span-2 px-3 py-2 text-sm text-slate-600 flex items-center">
                     {formatCurrency(it.line_total || 0, quote.currency)}

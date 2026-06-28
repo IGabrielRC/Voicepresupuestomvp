@@ -103,17 +103,17 @@ export default function History() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
+        <Loader2 className="w-6 h-6 text-slate-700 animate-spin" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-8">
+      <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-slate-100/30 flex items-center justify-center p-8">
         <div className="text-center max-w-md">
-          <p className="text-slate-700">{error}</p>
-          <a href="/" className="text-indigo-600 hover:underline mt-4 inline-block">
+          <p className="text-slate-700 leading-relaxed">{error}</p>
+          <a href="/" className="text-slate-900 font-medium hover:underline mt-4 inline-block">
             ← Volver al inicio
           </a>
         </div>
@@ -157,14 +157,24 @@ export default function History() {
         {isEmpty ? (
           <Card className="border-dashed border-slate-300">
             <CardContent className="py-12 text-center">
-              <div className="w-12 h-12 rounded-full bg-indigo-50 mx-auto flex items-center justify-center mb-4">
-                <Sparkles className="w-6 h-6 text-indigo-600" />
+              <div className="w-12 h-12 rounded-full bg-slate-100 mx-auto flex items-center justify-center mb-4">
+                <Sparkles className="w-6 h-6 text-slate-700" />
               </div>
               <h2 className="text-lg font-semibold text-slate-900">Empezá con tu primer audio</h2>
               <p className="mt-2 text-sm text-slate-600 max-w-md mx-auto">
                 Volvé a Telegram y mandale una nota de voz a tu bot. Él te va a responder con un
                 link al editor. Después va a aparecer acá.
               </p>
+              <div className="mt-6">
+                <Button
+                  onClick={() =>
+                    window.open('https://t.me/presupuestomvp_bot', '_blank', 'noreferrer')
+                  }
+                  className="bg-sky-500 hover:bg-sky-600 text-white"
+                >
+                  Abrir el bot en Telegram
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ) : (
@@ -190,7 +200,7 @@ export default function History() {
                     href={`/q/${q.id}`}
                     className="flex-1 min-w-0"
                   >
-                    <Card className="hover:border-indigo-300 hover:shadow-sm transition-all h-full">
+                    <Card className="hover:border-slate-300 hover:shadow-sm transition-all h-full">
                       <CardContent className="p-4 sm:p-5 flex items-center justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -210,7 +220,7 @@ export default function History() {
                             {q.item_count} {q.item_count === 1 ? 'item' : 'items'} · {dateStr}
                           </p>
                         </div>
-                        <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-indigo-500 transition-colors flex-shrink-0" />
+                        <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-slate-700 transition-colors flex-shrink-0" />
                       </CardContent>
                     </Card>
                   </a>
