@@ -611,19 +611,38 @@ export default function Editor({ quoteId }: { quoteId: string }) {
             </div>
             <div>
               <label htmlFor="validity-days" className="block text-xs font-medium text-slate-600 mb-1">Validez (días)</label>
-              <input
-                id="validity-days"
-                type="number"
-                value={quote.validity_days ?? ''}
-                onChange={(e) =>
-                  setQuote({
-                    ...quote,
-                    validity_days: e.target.value === '' ? null : Number(e.target.value),
-                  })
-                }
-                disabled={locked}
-                className={inputBase}
-              />
+              <div role="radiogroup" aria-label="Validez del presupuesto" className="flex flex-wrap gap-2">
+                {[
+                  { value: 3, label: '3 días' },
+                  { value: 7, label: '1 semana' },
+                  { value: 15, label: '15 días' },
+                ].map((opt) => {
+                  const selected = (quote.validity_days ?? 3) === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      disabled={locked}
+                      onClick={() =>
+                        setQuote({
+                          ...quote,
+                          validity_days: opt.value,
+                        })
+                      }
+                      className={
+                        'inline-flex items-center justify-center px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ' +
+                        (selected
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50')
+                      }
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
           <div className="mt-4">

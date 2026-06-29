@@ -287,7 +287,7 @@ async function handleVoiceNote(
     // Create quote + items
     const slug = newSlug();
     const editToken = newEditToken();
-    const validityDays = 15;
+    const validityDays = 3;
     const expiresAt = new Date(Date.now() + validityDays * 24 * 60 * 60 * 1000).toISOString();
 
     const { data: quote, error: qErr } = await supabase
