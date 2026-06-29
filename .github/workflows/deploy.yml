@@ -1,13 +1,17 @@
-name: Deploy to Easypanel VPS
+name: Deploy to Easypanel VPS via GHCR
 
 # Hardened deploy workflow: pre-flight validation, exact-commit checkout,
-# sequential backend-then-frontend deploy, deterministic health + smoke
-# gates, and per-service automatic rollback. Easypanel/Swarm/Traefik are
-# untouched; only this workflow file changes.
+# GHCR image build/push, sequential backend-then-frontend service update,
+# deterministic health + smoke gates, and per-service automatic rollback.
+# Easypanel/Swarm/Traefik are untouched; only this workflow file changes.
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'README*'
   workflow_dispatch:
     inputs:
       commit_sha:
@@ -16,19 +20,18 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 env:
   # Hardcoded defaults are intentional: a missing/misnamed value fails the
   # pre-flight checks loudly instead of silently deploying the wrong target.
-  APP_DIR: /opt/voicequote-source
-  REPO_URL: https://github.com/IGabrielRC/Voicepresupuestomvp.git
-  BACKEND_IMAGE: easypanel/presupuesto_mvp/presupuesto_back:latest
-  FRONTEND_IMAGE: easypanel/presupuesto_mvp/presupuesto_front:latest
   BACKEND_SERVICE: presupuesto_mvp_presupuesto_back
   FRONTEND_SERVICE: presupuesto_mvp_presupuesto_front
   BACKEND_SMOKE_URL: https://presupuesto-mvp-presupuesto-back.fwtktk.easypanel.host/api/health
   FRONTEND_SMOKE_URL: https://presupuesto-mvp-presupuesto-front.fwtktk.easypanel.host
   VPS_KNOWN_HOST: 72.60.28.69 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOJKdY+rQT7Dx9D8oGxPlClta2L/S0ybTJ2NhQj+cMVO
+  GHCR_REGISTRY: ghcr.io
+  GHCR_IMAGE_BASE: ghcr.io/igabrielrc/voicepresupuestomvp
 
 concurrency:
   group: deploy-production
@@ -39,6 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Resolve deploy commit
+        id: resolve
         run: |
           set -euo pipefail
           DEPLOY_SHA="${{ inputs.commit_sha || github.sha }}"
@@ -52,6 +56,13 @@ jobs:
           fi
           echo "Deploy commit: $DEPLOY_SHA"
           echo "DEPLOY_SHA=$DEPLOY_SHA" >> "$GITHUB_ENV"
+          echo "deploy_sha=$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve.outputs.deploy_sha }}
+          persist-credentials: false
 
       - name: Prepare SSH
         env:
@@ -96,34 +107,70 @@ jobs:
             exit 1
           fi
 
-      - name: Deploy exact commit to VPS
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.GHCR_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.backend
+          push: true
+          tags: |
+            ${{ env.GHCR_IMAGE_BASE }}/presupuesto_back:${{ steps.resolve.outputs.deploy_sha }}
+            ${{ env.GHCR_IMAGE_BASE }}/presupuesto_back:latest
+
+      - name: Verify VITE_API_URL secret
         env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
         run: |
           set -euo pipefail
-
           if [ -z "$VITE_API_URL" ]; then
-            echo "ERROR: VITE_API_URL GitHub secret is required." >&2
+            echo "ERROR: VITE_API_URL secret is required for frontend image build." >&2
             exit 1
           fi
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.web
+          push: true
+          build-args: VITE_API_URL=${{ secrets.VITE_API_URL }}
+          tags: |
+            ${{ env.GHCR_IMAGE_BASE }}/presupuesto_front:${{ steps.resolve.outputs.deploy_sha }}
+            ${{ env.GHCR_IMAGE_BASE }}/presupuesto_front:latest
+
+      - name: Deploy exact images to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_SHA: ${{ steps.resolve.outputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+
           if [ -z "$DEPLOY_SHA" ]; then
             echo "ERROR: DEPLOY_SHA is empty; aborting deploy." >&2
             exit 1
           fi
 
-          VITE_API_URL_B64="$(printf '%s' "$VITE_API_URL" | base64 -w 0)"
+          BACKEND_IMAGE="${GHCR_IMAGE_BASE}/presupuesto_back:${DEPLOY_SHA}"
+          FRONTEND_IMAGE="${GHCR_IMAGE_BASE}/presupuesto_front:${DEPLOY_SHA}"
 
           ssh -i ~/.ssh/vps_deploy_key \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile=~/.ssh/known_hosts \
             "$VPS_USER@$VPS_HOST" \
-            "APP_DIR='$APP_DIR' REPO_URL='$REPO_URL' BACKEND_IMAGE='$BACKEND_IMAGE' FRONTEND_IMAGE='$FRONTEND_IMAGE' BACKEND_SERVICE='$BACKEND_SERVICE' FRONTEND_SERVICE='$FRONTEND_SERVICE' BACKEND_SMOKE_URL='$BACKEND_SMOKE_URL' FRONTEND_SMOKE_URL='$FRONTEND_SMOKE_URL' VITE_API_URL_B64='$VITE_API_URL_B64' DEPLOY_SHA='$DEPLOY_SHA' bash -s" <<'REMOTE'
+            "BACKEND_IMAGE='$BACKEND_IMAGE' FRONTEND_IMAGE='$FRONTEND_IMAGE' BACKEND_SERVICE='$BACKEND_SERVICE' FRONTEND_SERVICE='$FRONTEND_SERVICE' BACKEND_SMOKE_URL='$BACKEND_SMOKE_URL' FRONTEND_SMOKE_URL='$FRONTEND_SMOKE_URL' DEPLOY_SHA='$DEPLOY_SHA' bash -s" <<'REMOTE'
             set -euo pipefail
-
-            VITE_API_URL="$(printf '%s' "$VITE_API_URL_B64" | base64 -d)"
 
             # --- Remote shell helpers ---
             fail() {
@@ -140,24 +187,6 @@ jobs:
               if ! docker service inspect "$svc" >/dev/null 2>&1; then
                 fail "Pre-flight failed: Swarm service not found: $svc"
               fi
-            }
-
-            checkout_commit() {
-              echo "Checking out exact commit $DEPLOY_SHA in $APP_DIR"
-              mkdir -p "$APP_DIR"
-              if [ ! -d "$APP_DIR/.git" ]; then
-                git clone "$REPO_URL" "$APP_DIR"
-              fi
-              cd "$APP_DIR"
-              git fetch origin "$DEPLOY_SHA" 2>/dev/null || git fetch origin main
-              git reset --hard "$DEPLOY_SHA"
-              git clean -fdx
-              local actual
-              actual="$(git rev-parse HEAD)"
-              if [ "$actual" != "$DEPLOY_SHA" ]; then
-                fail "Source checkout mismatch: expected $DEPLOY_SHA but got $actual"
-              fi
-              echo "OK: source tree is at $actual"
             }
 
             wait_service_running() {
@@ -217,31 +246,27 @@ jobs:
             }
 
             # --- Phase 1: Pre-flight validation ---
-            # Abort point: any failure here stops before checkout/build/update.
+            # Abort point: any failure here stops before pull/update.
             echo "=== Pre-flight validation ==="
-            require_cmd git
             require_cmd docker
             require_cmd curl
             inspect_service "$BACKEND_SERVICE"
             inspect_service "$FRONTEND_SERVICE"
             echo "OK: all pre-flight checks passed (commands present, services exist)."
 
-            # --- Phase 2: Exact commit checkout ---
-            # Abort point: SHA mismatch fails before any image is built.
-            echo "=== Source checkout ==="
-            checkout_commit
+            # --- Phase 2: Pull exact images ---
+            echo "=== Pull exact images ==="
+            docker pull "$BACKEND_IMAGE"
+            docker pull "$FRONTEND_IMAGE"
+            echo "OK: images pulled for $DEPLOY_SHA"
 
             # --- Phase 3: Sequential deploy (backend first, then frontend) ---
-            # Backend is a hard dependency for frontend: a backend build/update
+            # Backend is a hard dependency for frontend: a backend update
             # or health failure blocks the frontend work entirely.
             echo "=== Deploy backend (1/2) ==="
-            echo "Building backend image..."
-            docker build -t "$BACKEND_IMAGE" -f Dockerfile.backend .
             deploy_service "backend" "$BACKEND_SERVICE" "$BACKEND_IMAGE" "$BACKEND_SMOKE_URL" "get"
 
             echo "=== Deploy frontend (2/2) ==="
-            echo "Building frontend image..."
-            docker build -t "$FRONTEND_IMAGE" -f Dockerfile.web --build-arg VITE_API_URL="$VITE_API_URL" .
             deploy_service "frontend" "$FRONTEND_SERVICE" "$FRONTEND_IMAGE" "$FRONTEND_SMOKE_URL" "head"
 
             # --- Phase 4: Summary ---
