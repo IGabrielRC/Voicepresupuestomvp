@@ -14,6 +14,7 @@ env:
   FRONTEND_IMAGE: easypanel/presupuesto_mvp/presupuesto_front:latest
   BACKEND_SERVICE: presupuesto_mvp_presupuesto_back
   FRONTEND_SERVICE: presupuesto_mvp_presupuesto_front
+  VPS_KNOWN_HOST: 72.60.28.69 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOJKdY+rQT7Dx9D8oGxPlClta2L/S0ybTJ2NhQj+cMVO
   VPS_HOST_KEY_FINGERPRINT: SHA256:cyDRIhuBU4RAAVa8m7YOUkjivcfkDy3MggLYoxGI/Yg
 
 concurrency:
@@ -41,9 +42,8 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/vps_deploy_key
           chmod 600 ~/.ssh/vps_deploy_key
 
-          ssh-keyscan -t ed25519 "$VPS_HOST" > ~/.ssh/vps_known_hosts
-          ssh-keygen -lf ~/.ssh/vps_known_hosts | grep -F "$VPS_HOST_KEY_FINGERPRINT"
-          cat ~/.ssh/vps_known_hosts >> ~/.ssh/known_hosts
+          printf '%s\n' "$VPS_KNOWN_HOST" > ~/.ssh/known_hosts
+          ssh-keygen -lf ~/.ssh/known_hosts | grep -F "$VPS_HOST_KEY_FINGERPRINT"
 
       - name: Deploy exact commit to VPS
         env:
