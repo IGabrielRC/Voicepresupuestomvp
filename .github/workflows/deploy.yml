@@ -46,6 +46,10 @@ jobs:
             echo "ERROR: could not resolve deploy commit SHA." >&2
             exit 1
           fi
+          if ! printf '%s' "$DEPLOY_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "ERROR: deploy commit must be a full 40-character lowercase Git SHA." >&2
+            exit 1
+          fi
           echo "Deploy commit: $DEPLOY_SHA"
           echo "DEPLOY_SHA=$DEPLOY_SHA" >> "$GITHUB_ENV"
 
@@ -76,7 +80,18 @@ jobs:
           chmod 600 ~/.ssh/vps_deploy_key
 
           printf '%s\n' "$VPS_KNOWN_HOST" > ~/.ssh/known_hosts
-          if ! ssh -i ~/.ssh/vps_deploy_key -o BatchMode=yes -o ConnectTimeout=20 "$VPS_USER@$VPS_HOST" "echo ssh-ok"; then
+          EXPECTED_VPS_HOST="$(printf '%s' "$VPS_KNOWN_HOST" | awk '{print $1}')"
+          if [ "$VPS_HOST" != "$EXPECTED_VPS_HOST" ]; then
+            echo "ERROR: VPS_HOST does not match the pinned known host." >&2
+            exit 1
+          fi
+
+          if ! ssh -i ~/.ssh/vps_deploy_key \
+            -o BatchMode=yes \
+            -o ConnectTimeout=20 \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            "$VPS_USER@$VPS_HOST" "echo ssh-ok"; then
             echo "ERROR: VPS unreachable via SSH." >&2
             exit 1
           fi
@@ -100,7 +115,11 @@ jobs:
 
           VITE_API_URL_B64="$(printf '%s' "$VITE_API_URL" | base64 -w 0)"
 
-          ssh -i ~/.ssh/vps_deploy_key "$VPS_USER@$VPS_HOST" \
+          ssh -i ~/.ssh/vps_deploy_key \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            "$VPS_USER@$VPS_HOST" \
             "APP_DIR='$APP_DIR' REPO_URL='$REPO_URL' BACKEND_IMAGE='$BACKEND_IMAGE' FRONTEND_IMAGE='$FRONTEND_IMAGE' BACKEND_SERVICE='$BACKEND_SERVICE' FRONTEND_SERVICE='$FRONTEND_SERVICE' BACKEND_SMOKE_URL='$BACKEND_SMOKE_URL' FRONTEND_SMOKE_URL='$FRONTEND_SMOKE_URL' VITE_API_URL_B64='$VITE_API_URL_B64' DEPLOY_SHA='$DEPLOY_SHA' bash -s" <<'REMOTE'
             set -euo pipefail
 
