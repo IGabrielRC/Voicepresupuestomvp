@@ -15,7 +15,6 @@ env:
   BACKEND_SERVICE: presupuesto_mvp_presupuesto_back
   FRONTEND_SERVICE: presupuesto_mvp_presupuesto_front
   VPS_KNOWN_HOST: 72.60.28.69 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOJKdY+rQT7Dx9D8oGxPlClta2L/S0ybTJ2NhQj+cMVO
-  VPS_HOST_KEY_FINGERPRINT: SHA256:cyDRIhuBU4RAAVa8m7YOUkjivcfkDy3MggLYoxGI/Yg
 
 concurrency:
   group: deploy-production
@@ -29,11 +28,20 @@ jobs:
         env:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
         run: |
           set -euo pipefail
 
           if [ -z "$VPS_HOST" ]; then
             echo "VPS_HOST GitHub secret is required"
+            exit 1
+          fi
+          if [ -z "$VPS_USER" ]; then
+            echo "VPS_USER GitHub secret is required"
+            exit 1
+          fi
+          if [ -z "$VPS_SSH_KEY" ]; then
+            echo "VPS_SSH_KEY GitHub secret is required"
             exit 1
           fi
 
@@ -43,7 +51,7 @@ jobs:
           chmod 600 ~/.ssh/vps_deploy_key
 
           printf '%s\n' "$VPS_KNOWN_HOST" > ~/.ssh/known_hosts
-          ssh-keygen -lf ~/.ssh/known_hosts | grep -F "$VPS_HOST_KEY_FINGERPRINT"
+          ssh -i ~/.ssh/vps_deploy_key -o BatchMode=yes -o ConnectTimeout=20 "$VPS_USER@$VPS_HOST" "echo ssh-ok"
 
       - name: Deploy exact commit to VPS
         env:
