@@ -25,7 +25,7 @@ export default function Landing() {
     setError(null);
     try {
       const result = await api.simulateVoice({ currency: 'USD' });
-      window.location.href = `/q/${result.quote_id}`;
+      window.location.href = result.edit_url;
     } catch (e: any) {
       setError(
         'No se pudo conectar con el backend. ¿Está corriendo en http://localhost:3001? ' +

@@ -12,6 +12,7 @@ import {
   type InlineButton,
 } from '../services/telegram.js';
 import { newSlug } from '../services/slug.js';
+import { newEditToken } from '../services/token.js';
 import { checkAudioRateLimit } from '../middleware/rateLimit.js';
 
 export const telegramRouter = Router();
@@ -180,7 +181,7 @@ async function listRecentQuotes(chatId: number, telegramUserId: number) {
 
   const { data: quotes } = await supabase
     .from('quotes')
-    .select('id, slug, client_name, status, client_response, created_at, currency')
+    .select('id, slug, client_name, status, client_response, created_at, currency, edit_token')
     .eq('contractor_id', contractor.id)
     .order('created_at', { ascending: false })
     .limit(5);
@@ -217,7 +218,7 @@ async function listRecentQuotes(chatId: number, telegramUserId: number) {
     return [
       {
         text: `${icon} ${q.client_name || 'Sin nombre'} — ${dateStr}${riSuffix}`,
-        url: `${WEB_URL}/q/${q.id}`,
+        url: `${WEB_URL}/q/${q.id}?t=${q.edit_token}`,
       },
     ];
   });
@@ -285,6 +286,7 @@ async function handleVoiceNote(
 
     // Create quote + items
     const slug = newSlug();
+    const editToken = newEditToken();
     const validityDays = 15;
     const expiresAt = new Date(Date.now() + validityDays * 24 * 60 * 60 * 1000).toISOString();
 
@@ -293,6 +295,7 @@ async function handleVoiceNote(
       .insert({
         contractor_id: contractorId,
         slug,
+        edit_token: editToken,
         client_name: quoteJson.client_name,
         client_contact: quoteJson.client_contact,
         currency: quoteJson.currency || 'USD',
@@ -303,7 +306,7 @@ async function handleVoiceNote(
         status: 'draft',
         raw_gemini_output: JSON.stringify(quoteJson),
       })
-      .select('id')
+      .select('id, edit_token')
       .single();
     if (qErr) throw qErr;
 
@@ -328,7 +331,7 @@ async function handleVoiceNote(
       if (iErr) throw iErr;
     }
 
-    const editUrl = `${WEB_URL}/q/${quote.id}`;
+    const editUrl = `${WEB_URL}/q/${quote.id}?t=${quote.edit_token}`;
     const client = quoteJson.client_name || 'tu cliente';
     const itemsCount = itemsNormalized.length;
     const missingByItem = groupMissingFields(itemsNormalized, quoteJson.missing_fields || []);

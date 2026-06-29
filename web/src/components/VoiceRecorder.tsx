@@ -102,8 +102,8 @@ export default function VoiceRecorder({ onClose }: { onClose: () => void }) {
         const text = await res.text();
         throw new Error(text || `Error ${res.status}`);
       }
-      const { quote_id } = await res.json();
-      window.location.href = `/q/${quote_id}`;
+      const { edit_url, quote_id } = await res.json();
+      window.location.href = edit_url || `/q/${quote_id}`;
     } catch (e: any) {
       setError(e?.message || 'No se pudo procesar el audio.');
       setState('recorded');

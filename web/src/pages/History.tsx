@@ -49,7 +49,6 @@ const STATUS_BADGE: Record<
 };
 
 export default function History() {
-  const tgId = Number(new URLSearchParams(window.location.search).get('tg') || 0);
   const [quotes, setQuotes] = useState<QuoteRow[] | null>(null);
   const [contractorId, setContractorId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,41 +57,17 @@ export default function History() {
   const [deleteTarget, setDeleteTarget] = useState<QuoteRow | null>(null);
   const [deletedId, setDeletedId] = useState<string | null>(null);
 
-  function load() {
-    if (!tgId) return;
-    setLoading(true);
-    api
-      .getContractorByTelegram(tgId)
-      .then(({ contractor, quotes }) => {
-        setContractorId(contractor?.id ?? null);
-        setQuotes(quotes);
-        setLoading(false);
-      })
-      .catch((e) => {
-        setError(e?.message || 'No se pudieron cargar tus presupuestos.');
-        setLoading(false);
-      });
-  }
-
   useEffect(() => {
-    if (!tgId) {
-      setError('Abrí este link desde el bot de Telegram con /quotes.');
-      setLoading(false);
-      return;
-    }
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tgId]);
+    setError('Por seguridad, abrí tus presupuestos desde el bot de Telegram usando /quotes.');
+    setLoading(false);
+  }, []);
 
   async function deleteQuote() {
     if (!deleteTarget) return;
     setDeletingId(deleteTarget.id);
     try {
-      await api.deleteQuote(deleteTarget.id);
-      setQuotes((qs) => (qs ? qs.filter((q) => q.id !== deleteTarget.id) : qs));
-      setDeletedId(deleteTarget.id);
+      setError('Por seguridad, eliminá presupuestos desde el link de edición que te envía el bot.');
       setDeleteTarget(null);
-      setTimeout(() => setDeletedId(null), 3000);
     } catch (e: any) {
       setError(e?.message || 'No se pudo eliminar.');
     } finally {
@@ -147,10 +122,10 @@ export default function History() {
           <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
             Tus presupuestos
           </h1>
-          <p className="mt-2 text-slate-600">
+              <p className="mt-2 text-slate-600">
             {isEmpty
               ? 'Acá vas a ver los presupuestos que generes con tu bot.'
-              : `${quotes.length} presupuesto${quotes.length === 1 ? '' : 's'} generado${quotes.length === 1 ? '' : 's'}. Toca uno para abrirlo.`}
+              : `${quotes.length} presupuesto${quotes.length === 1 ? '' : 's'} generado${quotes.length === 1 ? '' : 's'}. Tocá uno para verlo.`}
           </p>
         </div>
 
@@ -197,7 +172,7 @@ export default function History() {
                   className="group relative flex items-stretch gap-1"
                 >
                   <a
-                    href={`/q/${q.id}`}
+                    href={`/s/${q.slug}`}
                     className="flex-1 min-w-0"
                   >
                     <Card className="hover:border-slate-300 hover:shadow-sm transition-all h-full">
@@ -225,14 +200,15 @@ export default function History() {
                     </Card>
                   </a>
                   <button
-                    onClick={() => setDeleteTarget(q)}
+                    onClick={() => setError('Por seguridad, eliminá presupuestos desde el link de edición que te envía el bot.')}
                     className={cn(
                       'px-2.5 rounded-lg border transition-colors',
                       deletedId === q.id
                         ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
                         : 'border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50'
                     )}
-                    aria-label="Eliminar"
+                    aria-label="Eliminar desde editor seguro"
+                    title="Eliminar desde el link de edición seguro"
                   >
                     {deletingId === q.id ? (
                       <Loader2 className="w-4 h-4 animate-spin" />

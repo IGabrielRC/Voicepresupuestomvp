@@ -66,12 +66,29 @@ export default function Editor({ quoteId }: { quoteId: string }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleted, setDeleted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [overrideInput, setOverrideInput] = useState('');
+  const [overrideError, setOverrideError] = useState<string | null>(null);
+  const [editToken, setEditToken] = useState<string | null>(null);
+  const [tokenError, setTokenError] = useState<string | null>(null);
   const lastSavedRef = useRef<string>('');
   const locked = quote?.client_response === 'accepted';
 
   useEffect(() => {
+    setOverrideInput(quote?.total_override != null ? String(quote.total_override) : '');
+    setOverrideError(null);
+  }, [quote?.id]);
+
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get('t');
+    if (!token) {
+      setTokenError('Link de edición incompleto: falta el token de seguridad.');
+      setLoading(false);
+      return;
+    }
+    setEditToken(token);
+
     api
-      .getQuote(quoteId)
+      .getQuote(quoteId, token)
       .then(({ quote, items }) => {
         setQuote(quote);
         setItems(items.sort((a, b) => a.sort_order - b.sort_order));
@@ -97,20 +114,25 @@ export default function Editor({ quoteId }: { quoteId: string }) {
   }, [quote, items, loading, locked]);
 
   async function save(isAuto = false) {
-    if (!quote || locked) return;
+    if (!quote || locked || !editToken) return;
     setSaving(true);
     if (!isAuto) setSaved(false);
     setError(null);
     try {
-      const { quote: q, items: its } = await api.patchQuote(quote.id, {
-        client_name: quote.client_name,
-        client_contact: quote.client_contact,
-        currency: quote.currency,
-        notes: quote.notes,
-        terms: quote.terms,
-        validity_days: quote.validity_days,
-        items: items.map((it, i) => ({ ...it, sort_order: i })),
-      });
+      const { quote: q, items: its } = await api.patchQuote(
+        quote.id,
+        {
+          client_name: quote.client_name,
+          client_contact: quote.client_contact,
+          currency: quote.currency,
+          notes: quote.notes,
+          terms: quote.terms,
+          validity_days: quote.validity_days,
+          total_override: quote.total_override,
+          items: items.map((it, i) => ({ ...it, sort_order: i })),
+        },
+        editToken
+      );
       setQuote(q);
       setItems(its);
       lastSavedRef.current = JSON.stringify({ q, i: its });
@@ -151,11 +173,39 @@ export default function Editor({ quoteId }: { quoteId: string }) {
     setItems(items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
   }
 
-  async function deleteQuote() {
+  function updateOverride(value: string) {
+    setOverrideInput(value);
     if (!quote) return;
+    if (value === '') {
+      setQuote({ ...quote, total_override: null });
+      setOverrideError(null);
+      return;
+    }
+    const num = Number(value);
+    if (Number.isNaN(num) || !Number.isFinite(num)) {
+      setOverrideError('Ingresá un número válido.');
+      return;
+    }
+    if (num < 0) {
+      setOverrideError('El total no puede ser negativo.');
+      return;
+    }
+    setQuote({ ...quote, total_override: num });
+    setOverrideError(null);
+  }
+
+  function clearOverride() {
+    if (!quote) return;
+    setOverrideInput('');
+    setQuote({ ...quote, total_override: null });
+    setOverrideError(null);
+  }
+
+  async function deleteQuote() {
+    if (!quote || !editToken) return;
     setDeleting(true);
     try {
-      await api.deleteQuote(quote.id);
+      await api.deleteQuote(quote.id, editToken);
       setDeleteOpen(false);
       setMenuOpen(false);
       setDeleted(true);
@@ -169,6 +219,21 @@ export default function Editor({ quoteId }: { quoteId: string }) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
+      </div>
+    );
+  }
+  if (tokenError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-slate-100/30 flex items-center justify-center p-8">
+        <div className="text-center max-w-md">
+          <p className="text-slate-700 leading-relaxed">{tokenError}</p>
+          <a
+            href="/"
+            className="text-slate-900 font-medium hover:underline mt-4 inline-block"
+          >
+            ← Volver al inicio
+          </a>
+        </div>
       </div>
     );
   }
@@ -225,7 +290,8 @@ export default function Editor({ quoteId }: { quoteId: string }) {
     );
   }
 
-  const total = items.reduce((s, it) => s + (it.line_total || 0), 0);
+  const calculatedTotal = items.reduce((s, it) => s + (it.line_total || 0), 0);
+  const effectiveTotal = quote.total_override != null ? quote.total_override : calculatedTotal;
 
   const inputBase =
     'w-full px-3 py-2 rounded-lg border border-slate-200/60 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-colors disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed';
@@ -443,14 +509,48 @@ export default function Editor({ quoteId }: { quoteId: string }) {
             </div>
           )}
 
-          <div className="mt-5 pt-5 border-t border-slate-200/60 flex justify-end">
+          <div className="mt-5 pt-5 border-t border-slate-200/60 flex flex-col sm:flex-row justify-between gap-4">
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">
+                Total calculado
+              </p>
+              <p className="text-xl font-semibold text-slate-500 tabular-nums">
+                {formatCurrency(calculatedTotal, quote.currency)}
+              </p>
+            </div>
             <div className="text-right">
               <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">
-                Total
+                Total final
               </p>
               <p className="text-2xl font-semibold text-slate-900 tabular-nums">
-                {formatCurrency(total, quote.currency)}
+                {formatCurrency(effectiveTotal, quote.currency)}
               </p>
+              <div className="mt-2 flex items-center justify-end gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Total manual"
+                  value={overrideInput}
+                  onChange={(e) => updateOverride(e.target.value)}
+                  disabled={locked}
+                  className="w-36 px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
+                />
+                {quote.total_override != null && !locked && (
+                  <button
+                    onClick={clearOverride}
+                    className="text-xs text-slate-500 hover:text-slate-800 underline"
+                  >
+                    Restablecer
+                  </button>
+                )}
+              </div>
+              {overrideError && (
+                <p className="mt-1 text-xs text-red-600">{overrideError}</p>
+              )}
+              {quote.total_override != null && !overrideError && (
+                <p className="mt-1 text-xs text-slate-400">Total ajustado manualmente</p>
+              )}
             </div>
           </div>
         </section>
@@ -522,7 +622,12 @@ export default function Editor({ quoteId }: { quoteId: string }) {
         </div>
       </main>
 
-      <ShareModal open={shareOpen} onClose={() => setShareOpen(false)} quoteId={quote.id} />
+      <ShareModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        quoteId={quote.id}
+        token={editToken || ''}
+      />
 
       {/* Delete confirmation modal */}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

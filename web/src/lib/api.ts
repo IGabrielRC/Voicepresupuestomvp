@@ -16,26 +16,37 @@ async function jsonFetch<T>(url: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export const api = {
-  getQuote: (id: string) =>
-    jsonFetch<{ quote: Quote; items: QuoteItem[] }>(`/api/quotes/${id}`),
+function authHeaders(token?: string): Record<string, string> {
+  return token ? { 'x-edit-token': token } : {};
+}
 
-  patchQuote: (id: string, body: Partial<Quote> & { items: QuoteItem[] }) =>
+export const api = {
+  getQuote: (id: string, token?: string) =>
+    jsonFetch<{ quote: Quote; items: QuoteItem[] }>(`/api/quotes/${id}`, {
+      headers: authHeaders(token),
+    }),
+
+  patchQuote: (id: string, body: Partial<Quote> & { items: QuoteItem[] }, token?: string) =>
     jsonFetch<{ quote: Quote; items: QuoteItem[] }>(`/api/quotes/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
+      headers: authHeaders(token),
     }),
 
   getQuoteBySlug: (slug: string) =>
     jsonFetch<{ quote: Quote; items: QuoteItem[] }>(`/api/quotes/slug/${slug}`),
 
-  shareQuote: (id: string) =>
+  shareQuote: (id: string, token?: string) =>
     jsonFetch<{ public_url: string; slug: string; id: string }>(`/api/quotes/${id}/share`, {
       method: 'POST',
+      headers: authHeaders(token),
     }),
 
-  deleteQuote: (id: string) =>
-    jsonFetch<{ ok: boolean }>(`/api/quotes/${id}`, { method: 'DELETE' }),
+  deleteQuote: (id: string, token?: string) =>
+    jsonFetch<{ ok: boolean }>(`/api/quotes/${id}`, {
+      method: 'DELETE',
+      headers: authHeaders(token),
+    }),
 
   // Client response: accept / reject / request changes. Public endpoint.
   respondToQuote: (slug: string, response: Exclude<ClientResponse, 'pending'>) =>
@@ -70,6 +81,7 @@ export const api = {
       quotes: Array<{
         id: string;
         slug: string;
+        edit_token: string | null;
         client_name: string | null;
         client_contact: string | null;
         status: 'draft' | 'shared' | 'expired';

@@ -71,8 +71,9 @@ export default function PublicQuote({ slug }: { slug: string }) {
   // Open Graph / document title for nice WhatsApp previews
   useEffect(() => {
     if (!quote) return;
-    const total = items.reduce((s, it) => s + (it.line_total || 0), 0);
-    const totalStr = formatCurrency(total, quote.currency);
+    const calculatedTotal = items.reduce((s, it) => s + (it.line_total || 0), 0);
+    const effectiveTotal = quote.total_override != null ? quote.total_override : calculatedTotal;
+    const totalStr = formatCurrency(effectiveTotal, quote.currency);
     const business = profile?.business_name || 'VoiceQuote';
     document.title = `Presupuesto para ${quote.client_name || 'cliente'} — ${totalStr} | ${business}`;
 
@@ -138,8 +139,10 @@ export default function PublicQuote({ slug }: { slug: string }) {
     );
   }
 
-  const total = items.reduce((s, it) => s + (it.line_total || 0), 0);
-  const totalStr = formatCurrency(total, quote.currency);
+  const calculatedTotal = items.reduce((s, it) => s + (it.line_total || 0), 0);
+  const effectiveTotal = quote.total_override != null ? quote.total_override : calculatedTotal;
+  const totalStr = formatCurrency(effectiveTotal, quote.currency);
+  const totalAdjusted = quote.total_override != null && quote.total_override !== calculatedTotal;
   const expired = isExpired(quote.expires_at);
   const businessName = profile?.business_name || 'Tu empresa';
   const quoteNumber = quote.id.slice(0, 8).toUpperCase();
@@ -340,6 +343,9 @@ export default function PublicQuote({ slug }: { slug: string }) {
                 <p className="text-4xl font-bold text-slate-900 mt-2 tracking-tight tabular-nums">
                   {totalStr}
                 </p>
+                {totalAdjusted && (
+                  <p className="text-xs text-slate-400 mt-1">Total ajustado manualmente</p>
+                )}
               </div>
             </div>
           </CardContent>

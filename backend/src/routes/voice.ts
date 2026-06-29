@@ -3,6 +3,7 @@ import multer from 'multer';
 import { supabase } from '../lib/supabase.js';
 import { audioToQuote } from '../services/gemini.js';
 import { newSlug } from '../services/slug.js';
+import { newEditToken } from '../services/token.js';
 
 export const voiceRouter = Router();
 
@@ -36,6 +37,7 @@ voiceRouter.post('/voice/from-web', upload.single('audio'), async (req, res) => 
     }
 
     const slug = newSlug();
+    const editToken = newEditToken();
     const validityDays = 15;
     const expiresAt = new Date(Date.now() + validityDays * 24 * 60 * 60 * 1000).toISOString();
 
@@ -44,6 +46,7 @@ voiceRouter.post('/voice/from-web', upload.single('audio'), async (req, res) => 
       .insert({
         contractor_id: contractorId,
         slug,
+        edit_token: editToken,
         client_name: quoteJson.client_name,
         client_contact: quoteJson.client_contact,
         currency: quoteJson.currency || 'USD',
@@ -54,7 +57,7 @@ voiceRouter.post('/voice/from-web', upload.single('audio'), async (req, res) => 
         status: 'draft',
         raw_gemini_output: JSON.stringify(quoteJson),
       })
-      .select('id')
+      .select('id, edit_token')
       .single();
     if (qErr) throw qErr;
 
@@ -71,7 +74,12 @@ voiceRouter.post('/voice/from-web', upload.single('audio'), async (req, res) => 
       if (iErr) throw iErr;
     }
 
-    res.json({ quote_id: quote.id, slug });
+    const webBaseUrl = process.env.WEB_BASE_URL || 'http://localhost:5173';
+    res.json({
+      quote_id: quote.id,
+      slug,
+      edit_url: `${webBaseUrl}/q/${quote.id}?t=${quote.edit_token}`,
+    });
   } catch (e: any) {
     console.error('[voice] error', e?.message || e);
     res.status(500).json({ error: e?.message || 'internal_error' });

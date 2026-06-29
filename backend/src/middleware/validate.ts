@@ -40,6 +40,12 @@ export function validatePatchQuoteBody(body: any): string | null {
     if (body.validity_days < 1 || body.validity_days > 3650) return 'validity_days fuera de rango (1-3650)';
   }
 
+  if (body.total_override !== null && body.total_override !== undefined) {
+    if (typeof body.total_override !== 'number' || !Number.isFinite(body.total_override))
+      return 'total_override debe ser un número válido';
+    if (body.total_override < 0) return 'total_override no puede ser negativo';
+  }
+
   if (body.items !== null && body.items !== undefined) {
     if (!Array.isArray(body.items)) return 'items debe ser array';
     if (body.items.length > MAX_ITEMS) return `máximo ${MAX_ITEMS} items`;

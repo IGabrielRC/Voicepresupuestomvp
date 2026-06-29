@@ -22,6 +22,8 @@ export interface Quote {
   expires_at: string | null;
   status: 'draft' | 'shared' | 'expired';
   client_response: ClientResponse;
+  total_override: number | null;
+  edit_token?: string | null;
   created_at: string;
 }
 

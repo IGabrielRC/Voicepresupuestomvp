@@ -6,10 +6,12 @@ export default function ShareModal({
   open,
   onClose,
   quoteId,
+  token,
 }: {
   open: boolean;
   onClose: () => void;
   quoteId: string;
+  token: string;
 }) {
   const [loading, setLoading] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
@@ -20,7 +22,7 @@ export default function ShareModal({
     setLoading(true);
     setError(null);
     try {
-      const result = await api.shareQuote(quoteId);
+      const result = await api.shareQuote(quoteId, token);
       setUrl(result.public_url);
     } catch (e: any) {
       setError(e?.message || 'No se pudo generar el link.');
