@@ -7,7 +7,6 @@ import { telegramRouter } from './routes/telegram.js';
 import { quotesRouter } from './routes/quotes.js';
 import { contractorsRouter } from './routes/contractors.js';
 import { testRouter } from './routes/test.js';
-import { voiceRouter } from './routes/voice.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +21,6 @@ app.use('/api', telegramRouter);
 app.use('/api', quotesRouter);
 app.use('/api', contractorsRouter);
 app.use('/api', testRouter);
-app.use('/api', voiceRouter);
 
 // 404 for unknown /api/*
 app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
@@ -50,7 +48,6 @@ app.listen(env.PORT, () => {
   console.log(`[backend] listening on http://localhost:${env.PORT}`);
   console.log(`[backend] webhook:    POST /api/webhooks/telegram`);
   console.log(`[backend] simulate:   POST /api/test/simulate-voice`);
-  console.log(`[backend] voice:      POST /api/voice/from-web`);
   console.log(`[backend] health:     GET  /api/health`);
   console.log(`[backend] serving frontend from ${frontendDist}`);
   console.log(`[backend] public URL: ${env.WEB_BASE_URL}`);

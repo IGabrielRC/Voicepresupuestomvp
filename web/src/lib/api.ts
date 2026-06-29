@@ -108,19 +108,4 @@ export const api = {
         item_count: number;
       }>;
     }>(`/api/contractors/by-telegram/${tgUserId}`),
-
-  uploadVoice: (audio: Blob) => {
-    const formData = new FormData();
-    formData.append('audio', audio, 'voice.webm');
-    return fetch(`${BASE}/api/voice/from-web`, {
-      method: 'POST',
-      body: formData,
-    }).then(async (res) => {
-      if (!res.ok) {
-        const message = await parseError(res);
-        throw new Error(message);
-      }
-      return res.json() as Promise<{ edit_url: string; quote_id: string }>;
-    });
-  },
 };

@@ -12,14 +12,12 @@ import {
   Send,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import VoiceRecorder from '../components/VoiceRecorder';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
 export default function Landing() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showRecorder, setShowRecorder] = useState(false);
 
   async function tryDemo() {
     setLoading(true);
@@ -78,15 +76,6 @@ export default function Landing() {
             >
               {loading ? 'Creando demo...' : 'Probar demo ahora'}
               {!loading && <ArrowRight className="w-4 h-4" />}
-            </Button>
-            <Button
-              onClick={() => setShowRecorder(true)}
-              size="lg"
-              variant="outline"
-              className="border-slate-200 text-slate-700 hover:bg-slate-50 transition-all"
-            >
-              <Mic className="w-4 h-4" />
-              Grabar nota de voz
             </Button>
             <Button
               onClick={() => window.open('https://t.me/presupuestomvp_bot', '_blank', 'noreferrer')}
@@ -245,13 +234,13 @@ export default function Landing() {
                 {!loading && <ArrowRight className="w-4 h-4" />}
               </Button>
               <Button
-                onClick={() => setShowRecorder(true)}
+                onClick={() => window.open('https://t.me/presupuestomvp_bot', '_blank', 'noreferrer')}
                 size="lg"
                 variant="outline"
                 className="border-slate-700 text-white hover:bg-slate-800 bg-transparent"
               >
-                <Mic className="w-4 h-4" />
-                Grabar mi voz
+                <Send className="w-4 h-4" />
+                Usar el bot en Telegram
               </Button>
             </div>
           </CardContent>
@@ -274,7 +263,6 @@ export default function Landing() {
         </div>
       </footer>
 
-      {showRecorder && <VoiceRecorder onClose={() => setShowRecorder(false)} />}
     </div>
   );
 }
