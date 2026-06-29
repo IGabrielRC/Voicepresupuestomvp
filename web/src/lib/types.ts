@@ -24,6 +24,8 @@ export interface Quote {
   client_response: ClientResponse;
   total_override: number | null;
   edit_token?: string | null;
+  is_active?: boolean | null;
+  replaced_by_slug?: string | null;
   created_at: string;
 }
 

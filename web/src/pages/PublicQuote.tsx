@@ -49,6 +49,7 @@ export default function PublicQuote({ slug }: { slug: string }) {
   const [profile, setProfile] = useState<ContractorProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [replacement, setReplacement] = useState<{ message: string; new_slug?: string } | null>(null);
   const [response, setResponse] = useState<ClientResponse>('pending');
   const [responding, setResponding] = useState<Exclude<ClientResponse, 'pending'> | null>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -56,7 +57,13 @@ export default function PublicQuote({ slug }: { slug: string }) {
   useEffect(() => {
     api
       .getQuoteBySlug(slug)
-      .then(async ({ quote, items }) => {
+      .then(async (result) => {
+        if (result.kind === 'replaced') {
+          setReplacement({ message: result.message, new_slug: result.new_slug });
+          setLoading(false);
+          return;
+        }
+        const { quote, items } = result;
         if (quote.status === 'draft') {
           setError('Este presupuesto todavía no fue compartido por el contratista.');
           setLoading(false);
@@ -149,7 +156,21 @@ export default function PublicQuote({ slug }: { slug: string }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-50 to-indigo-50/30 p-8">
         <div className="text-center max-w-md">
-          <p className="text-slate-700">{error || 'Presupuesto no encontrado.'}</p>
+          {replacement ? (
+            <div className="space-y-4">
+              <p className="text-slate-700">{replacement.message}</p>
+              {replacement.new_slug && (
+                <a
+                  href={`/s/${replacement.new_slug}`}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition-colors"
+                >
+                  Ver presupuesto actualizado →
+                </a>
+              )}
+            </div>
+          ) : (
+            <p className="text-slate-700">{error || 'Presupuesto no encontrado.'}</p>
+          )}
         </div>
       </div>
     );

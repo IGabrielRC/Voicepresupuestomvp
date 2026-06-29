@@ -75,6 +75,15 @@ testRouter.post('/test/simulate-voice', async (req, res) => {
   const { error: iErr } = await supabase.from('quote_items').insert(items);
   if (iErr) return res.status(500).json({ error: iErr.message });
 
+  // Track the slug so public links resolve through quote_slugs history.
+  const { error: slugErr } = await supabase.from('quote_slugs').insert({
+    slug,
+    quote_id: quote.id,
+    is_active: true,
+    created_at: new Date().toISOString(),
+  });
+  if (slugErr) console.error('[test] quote_slugs insert failed', slugErr);
+
   res.json({
     quote_id: quote.id,
     slug,

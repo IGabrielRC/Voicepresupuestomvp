@@ -2,14 +2,29 @@ import { Router, Request, Response } from 'express';
 import { env } from '../lib/env.js';
 import { supabase } from '../lib/supabase.js';
 import { sendMessage } from '../services/telegram.js';
+import { newSlug } from '../services/slug.js';
+import { newEditToken } from '../services/token.js';
+import {
+  isShareMode,
+  buildInactiveSlugMessage,
+  buildCloneRow,
+  buildCloneItems,
+  type ShareMode,
+} from '../services/quotes.js';
 import { checkPatchRateLimit } from '../middleware/rateLimit.js';
 import { validatePatchQuoteBody } from '../middleware/validate.js';
+
+const MAX_SLUG_ATTEMPTS = 3;
+
+function isUniqueViolation(error: any): boolean {
+  return error?.code === '23505';
+}
 
 export const quotesRouter = Router();
 
 // Columns exposed by the public quote endpoint. Never expose edit_token here.
 const PUBLIC_QUOTE_SELECT =
-  'id, contractor_id, slug, client_name, client_contact, currency, notes, terms, validity_days, expires_at, status, client_response, total_override, created_at, quote_items(*)' as const;
+  'id, contractor_id, slug, client_name, client_contact, currency, notes, terms, validity_days, expires_at, status, client_response, total_override, created_at, is_active, quote_items(*)' as const;
 
 async function loadQuote(id: string) {
   const { data, error } = await supabase
@@ -58,6 +73,90 @@ function invalidEditToken(res: Response) {
   return res.status(403).json({ error: 'invalid_edit_token' });
 }
 
+async function ensureSlugActive(quoteId: string, slug: string) {
+  const now = new Date().toISOString();
+  const { error } = await supabase.from('quote_slugs').upsert(
+    {
+      slug,
+      quote_id: quoteId,
+      is_active: true,
+      created_at: now,
+    },
+    { onConflict: 'slug' }
+  );
+  if (error) console.error('[ensureSlugActive] failed', error);
+}
+
+async function deactivateSlug(
+  quoteId: string,
+  slug: string,
+  replacedBySlug: string,
+  now: string
+) {
+  const { error } = await supabase.from('quote_slugs').upsert(
+    {
+      slug,
+      quote_id: quoteId,
+      is_active: false,
+      replaced_by_slug: replacedBySlug,
+      created_at: now,
+    },
+    { onConflict: 'slug' }
+  );
+  if (error) console.error('[deactivateSlug] failed', error);
+}
+
+async function deactivateActiveSlugsExcept(
+  quoteId: string,
+  keepSlug: string,
+  replacedBySlug: string
+) {
+  const { error } = await supabase
+    .from('quote_slugs')
+    .update({ is_active: false, replaced_by_slug: replacedBySlug })
+    .eq('quote_id', quoteId)
+    .eq('is_active', true)
+    .neq('slug', keepSlug);
+  if (error) console.error('[deactivateActiveSlugsExcept] failed', error);
+}
+
+async function tryReserveSlug(
+  quoteId: string,
+  slug: string,
+  now: string
+): Promise<boolean> {
+  const { error } = await supabase.from('quote_slugs').insert({
+    slug,
+    quote_id: quoteId,
+    is_active: true,
+    created_at: now,
+  });
+  return !error;
+}
+
+async function resolveReplacementSlug(
+  replacedBySlug: string | null | undefined
+): Promise<string | null> {
+  if (!replacedBySlug) return null;
+  const { data: replacement } = await supabase
+    .from('quote_slugs')
+    .select('is_active')
+    .eq('slug', replacedBySlug)
+    .single();
+  return replacement?.is_active ? replacedBySlug : null;
+}
+
+async function buildInactiveResponse(quoteId: string): Promise<{ error: 'replaced'; message: string; new_slug?: string }> {
+  const { data: sourceQuote } = await supabase
+    .from('quotes')
+    .select('client_response, replaced_by_slug')
+    .eq('id', quoteId)
+    .single();
+
+  let newSlug: string | null = await resolveReplacementSlug(sourceQuote?.replaced_by_slug);
+  return buildInactiveSlugMessage(sourceQuote?.client_response, newSlug);
+}
+
 quotesRouter.get('/quotes/:id', async (req: Request, res: Response) => {
   const auth = await authorizeQuoteEdit(req, req.params.id);
   if (!auth.ok) return invalidEditToken(res);
@@ -83,12 +182,18 @@ quotesRouter.patch('/quotes/:id', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'invalid_input', message: validationError });
   }
 
-  // Lock once accepted: prevent silent edits after the client signed off.
+  // Lock once accepted or archived: prevent edits on signed-off / replaced quotes.
   const { data: current } = await supabase
     .from('quotes')
-    .select('client_response, status')
+    .select('client_response, status, is_active')
     .eq('id', auth.quoteId)
     .single();
+  if (current?.is_active === false) {
+    return res.status(403).json({
+      error: 'quote_archived',
+      message: 'Este presupuesto está archivado. Creá uno nuevo si necesitás hacer cambios.',
+    });
+  }
   if (current?.client_response === 'accepted') {
     return res.status(403).json({
       error: 'quote_locked',
@@ -129,10 +234,42 @@ quotesRouter.patch('/quotes/:id', async (req: Request, res: Response) => {
 });
 
 quotesRouter.get('/quotes/slug/:slug', async (req: Request, res: Response) => {
+  const slug = req.params.slug;
+
+  // Slug history is the source of truth for public links.
+  const { data: slugRow, error: sErr } = await supabase
+    .from('quote_slugs')
+    .select('quote_id, is_active, replaced_by_slug')
+    .eq('slug', slug)
+    .single();
+
+  if (sErr || !slugRow) {
+    // Fallback for any legacy slug not yet in history.
+    const { data, error } = await supabase
+      .from('quotes')
+      .select(PUBLIC_QUOTE_SELECT)
+      .eq('slug', slug)
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'not_found' });
+    return res.json({ quote: data, items: data.quote_items });
+  }
+
+  if (!slugRow.is_active) {
+    const newSlug = await resolveReplacementSlug(slugRow.replaced_by_slug);
+    const { data: sourceQuote } = await supabase
+      .from('quotes')
+      .select('client_response')
+      .eq('id', slugRow.quote_id)
+      .single();
+
+    const body = buildInactiveSlugMessage(sourceQuote?.client_response, newSlug);
+    return res.status(410).json(body);
+  }
+
   const { data, error } = await supabase
     .from('quotes')
     .select(PUBLIC_QUOTE_SELECT)
-    .eq('slug', req.params.slug)
+    .eq('id', slugRow.quote_id)
     .single();
   if (error || !data) return res.status(404).json({ error: 'not_found' });
   res.json({ quote: data, items: data.quote_items });
@@ -142,15 +279,131 @@ quotesRouter.post('/quotes/:id/share', async (req: Request, res: Response) => {
   const auth = await authorizeQuoteEdit(req, req.params.id);
   if (!auth.ok) return invalidEditToken(res);
 
-  const { data, error } = await supabase
+  const mode: ShareMode = isShareMode(req.body?.mode) ? req.body.mode : 'share_accepted';
+
+  const { data: quote, error: qErr } = await supabase
     .from('quotes')
-    .update({ status: 'shared' })
+    .select('*, quote_items(*)')
     .eq('id', auth.quoteId)
-    .select('slug, id')
     .single();
-  if (error) return res.status(500).json({ error: error.message });
-  const public_url = `${env.WEB_BASE_URL}/s/${data.slug}`;
-  res.json({ public_url, slug: data.slug, id: data.id });
+  if (qErr || !quote) return res.status(404).json({ error: 'not_found' });
+
+  if (quote.is_active === false) {
+    return res.status(403).json({
+      error: 'quote_archived',
+      message: 'Este presupuesto está archivado y no se puede compartir.',
+    });
+  }
+
+  const publicBase = `${env.WEB_BASE_URL}/s`;
+  const now = new Date().toISOString();
+
+  // Default / accepted: keep the same slug and mark as shared.
+  if (mode === 'share_accepted') {
+    const { data, error } = await supabase
+      .from('quotes')
+      .update({ status: 'shared' })
+      .eq('id', quote.id)
+      .select('slug, id')
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+
+    await ensureSlugActive(quote.id, data.slug);
+
+    const public_url = `${publicBase}/${data.slug}`;
+    return res.json({ public_url, slug: data.slug, id: data.id });
+  }
+
+  // Changes requested: same quote, fresh slug, old slug becomes inactive.
+  if (mode === 'reissue_changes') {
+    let nextSlug: string | null = null;
+    for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
+      const candidate = newSlug();
+      const reserved = await tryReserveSlug(quote.id, candidate, now);
+      if (reserved) {
+        nextSlug = candidate;
+        break;
+      }
+    }
+    if (!nextSlug) {
+      return res.status(500).json({ error: 'slug_collision' });
+    }
+
+    // Deactivate every other active slug for this quote so prior reissues stop leaking.
+    await deactivateActiveSlugsExcept(quote.id, nextSlug, nextSlug);
+
+    const { error: uErr } = await supabase
+      .from('quotes')
+      .update({ slug: nextSlug, status: 'shared' })
+      .eq('id', quote.id);
+    if (uErr) return res.status(500).json({ error: uErr.message });
+
+    const public_url = `${publicBase}/${nextSlug}`;
+    return res.json({ public_url, slug: nextSlug, id: quote.id });
+  }
+
+  // Rejected: clone the quote, archive the original, old slug points to the new one.
+  let nextSlug = newSlug();
+  const nextEditToken = newEditToken();
+  const cloneRow = buildCloneRow(quote, nextSlug, nextEditToken);
+
+  const { data: newQuote, error: cErr } = await supabase
+    .from('quotes')
+    .insert(cloneRow)
+    .select('id, slug')
+    .single();
+  if (cErr) return res.status(500).json({ error: cErr.message });
+
+  const itemRows = buildCloneItems(quote.quote_items, newQuote.id);
+  if (itemRows.length > 0) {
+    const { error: iErr } = await supabase.from('quote_items').insert(itemRows);
+    if (iErr) {
+      await supabase.from('quotes').delete().eq('id', newQuote.id);
+      return res.status(500).json({ error: iErr.message });
+    }
+  }
+
+  let reservedSlug: string | null = null;
+  for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
+    const { error: insertErr } = await supabase.from('quote_slugs').insert({
+      slug: nextSlug,
+      quote_id: newQuote.id,
+      is_active: true,
+      created_at: now,
+    });
+    if (!insertErr) {
+      reservedSlug = nextSlug;
+      break;
+    }
+    if (!isUniqueViolation(insertErr)) {
+      await supabase.from('quotes').delete().eq('id', newQuote.id);
+      return res.status(500).json({ error: insertErr.message });
+    }
+    nextSlug = newSlug();
+    const { error: updateErr } = await supabase
+      .from('quotes')
+      .update({ slug: nextSlug })
+      .eq('id', newQuote.id);
+    if (updateErr) {
+      await supabase.from('quotes').delete().eq('id', newQuote.id);
+      return res.status(500).json({ error: updateErr.message });
+    }
+  }
+
+  if (!reservedSlug) {
+    await supabase.from('quotes').delete().eq('id', newQuote.id);
+    return res.status(500).json({ error: 'slug_collision' });
+  }
+
+  await supabase
+    .from('quotes')
+    .update({ is_active: false, replaced_by_slug: reservedSlug, status: 'shared' })
+    .eq('id', quote.id);
+
+  await deactivateSlug(quote.id, quote.slug, reservedSlug, now);
+
+  const public_url = `${publicBase}/${reservedSlug}`;
+  return res.json({ public_url, slug: reservedSlug, id: newQuote.id });
 });
 
 // Delete a quote. Items cascade (FK ON DELETE CASCADE).
@@ -171,13 +424,50 @@ quotesRouter.post('/quotes/slug/:slug/respond', async (req: Request, res: Respon
     return res.status(400).json({ error: 'invalid_response' });
   }
 
+  const slug = req.params.slug;
+
+  // Resolve through slug history first so stale / replaced links are rejected.
+  const { data: slugRow, error: sErr } = await supabase
+    .from('quote_slugs')
+    .select('quote_id, is_active, replaced_by_slug')
+    .eq('slug', slug)
+    .single();
+
+  let quoteId: string | null = null;
+
+  if (sErr || !slugRow) {
+    // Legacy slug fallback: look up the quote directly.
+    const { data: legacyQuote, error: lErr } = await supabase
+      .from('quotes')
+      .select('id, is_active')
+      .eq('slug', slug)
+      .single();
+    if (lErr || !legacyQuote) return res.status(404).json({ error: 'not_found' });
+    quoteId = legacyQuote.id;
+    if (legacyQuote.is_active === false) {
+      const body = await buildInactiveResponse(legacyQuote.id);
+      return res.status(410).json(body);
+    }
+  } else {
+    if (!slugRow.is_active) {
+      const body = await buildInactiveResponse(slugRow.quote_id);
+      return res.status(410).json(body);
+    }
+    quoteId = slugRow.quote_id;
+  }
+
   // Fetch quote with contractor's telegram_user_id and edit_token (via FK join).
   const { data: quote, error: qErr } = await supabase
     .from('quotes')
-    .select('id, contractor_id, client_name, slug, edit_token, contractors(telegram_user_id)')
-    .eq('slug', req.params.slug)
+    .select('id, contractor_id, client_name, slug, edit_token, is_active, contractors(telegram_user_id)')
+    .eq('id', quoteId)
     .single();
   if (qErr || !quote) return res.status(404).json({ error: 'not_found' });
+
+  if (quote.is_active === false) {
+    const body = await buildInactiveResponse(quote.id);
+    return res.status(410).json(body);
+  }
 
   const { error: uErr } = await supabase
     .from('quotes')

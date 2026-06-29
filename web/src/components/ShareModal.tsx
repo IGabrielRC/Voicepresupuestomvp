@@ -7,11 +7,13 @@ export default function ShareModal({
   onClose,
   quoteId,
   token,
+  mode,
 }: {
   open: boolean;
   onClose: () => void;
   quoteId: string;
   token: string;
+  mode?: 'reissue_changes' | 'reissue_rejected' | 'share_accepted';
 }) {
   const [loading, setLoading] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
@@ -22,7 +24,7 @@ export default function ShareModal({
     setLoading(true);
     setError(null);
     try {
-      const result = await api.shareQuote(quoteId, token);
+      const result = await api.shareQuote(quoteId, token, mode);
       setUrl(result.public_url);
     } catch (e: any) {
       setError(e?.message || 'No se pudo generar el link.');

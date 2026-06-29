@@ -44,7 +44,7 @@ const RESPONSE_BADGE: Record<
   },
   rejected: {
     icon: XCircle,
-    label: 'Tu cliente RECHAZÓ este presupuesto.',
+    label: 'Tu cliente RECHAZÓ este presupuesto. Editá y volvé a compartir.',
     className: 'bg-red-50 border-red-200 text-red-800',
   },
   changes_requested: {
@@ -74,7 +74,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
   const [tokenError, setTokenError] = useState<string | null>(null);
   const lastSavedRef = useRef<string>('');
   const lastManualSaveAt = useRef<number>(0);
-  const locked = quote?.client_response === 'accepted';
+  const locked = quote?.client_response === 'accepted' || quote?.is_active === false;
 
   useEffect(() => {
     setOverrideInput(quote?.total_override != null ? String(quote.total_override) : '');
@@ -340,7 +340,13 @@ export default function Editor({ quoteId }: { quoteId: string }) {
               className="gap-1.5"
             >
               <Share2 className="w-4 h-4" />
-              <span className="hidden sm:inline">Compartir</span>
+              <span className="hidden sm:inline">
+                {quote.client_response === 'rejected'
+                  ? 'Volver a compartir'
+                  : quote.client_response === 'changes_requested'
+                    ? 'Compartir nueva versión'
+                    : 'Compartir'}
+              </span>
             </Button>
             <div className="relative">
               <button
@@ -417,7 +423,16 @@ export default function Editor({ quoteId }: { quoteId: string }) {
       )}
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-        {quote.client_response && quote.client_response !== 'pending' && (
+        {quote.is_active === false && (
+          <div className="rounded-xl border p-4 flex items-center gap-3 transition-colors bg-slate-50 border-slate-200 text-slate-800">
+            <Lock className="w-5 h-5 flex-shrink-0" />
+            <p className="font-medium tracking-tight">
+              Este presupuesto está archivado. Usá el nuevo presupuesto generado al compartir.
+            </p>
+          </div>
+        )}
+
+        {quote.is_active !== false && quote.client_response && quote.client_response !== 'pending' && (
           <div
             className={`rounded-xl border p-4 flex items-center gap-3 transition-colors ${
               RESPONSE_BADGE[quote.client_response].className
@@ -686,6 +701,13 @@ export default function Editor({ quoteId }: { quoteId: string }) {
         onClose={() => setShareOpen(false)}
         quoteId={quote.id}
         token={editToken || ''}
+        mode={
+          quote.client_response === 'rejected'
+            ? 'reissue_rejected'
+            : quote.client_response === 'changes_requested'
+              ? 'reissue_changes'
+              : 'share_accepted'
+        }
       />
 
       {/* Delete confirmation modal */}

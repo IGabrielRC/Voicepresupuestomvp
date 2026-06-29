@@ -49,12 +49,35 @@ export const api = {
       headers: authHeaders(token),
     }),
 
-  getQuoteBySlug: (slug: string) =>
-    jsonFetch<{ quote: Quote; items: QuoteItem[] }>(`/api/quotes/slug/${slug}`),
+  getQuoteBySlug: async (slug: string) => {
+    const res = await fetch(`${BASE}/api/quotes/slug/${slug}`);
+    if (res.status === 410) {
+      const body = await res.json();
+      return {
+        kind: 'replaced' as const,
+        message: body.message as string,
+        new_slug: body.new_slug as string | undefined,
+      };
+    }
+    if (!res.ok) {
+      const message = await parseError(res);
+      throw new Error(message);
+    }
+    return { kind: 'ok' as const, ...(await res.json()) } as {
+      kind: 'ok';
+      quote: Quote;
+      items: QuoteItem[];
+    };
+  },
 
-  shareQuote: (id: string, token?: string) =>
+  shareQuote: (
+    id: string,
+    token?: string,
+    mode?: 'reissue_changes' | 'reissue_rejected' | 'share_accepted'
+  ) =>
     jsonFetch<{ public_url: string; slug: string; id: string }>(`/api/quotes/${id}/share`, {
       method: 'POST',
+      body: JSON.stringify(mode ? { mode } : {}),
       headers: authHeaders(token),
     }),
 

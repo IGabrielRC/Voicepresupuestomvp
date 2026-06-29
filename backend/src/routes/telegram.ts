@@ -310,6 +310,15 @@ async function handleVoiceNote(
       .single();
     if (qErr) throw qErr;
 
+    // Track the slug so public links resolve through quote_slugs history.
+    const { error: slugErr } = await supabase.from('quote_slugs').insert({
+      slug,
+      quote_id: quote.id,
+      is_active: true,
+      created_at: new Date().toISOString(),
+    });
+    if (slugErr) console.error('[telegram] quote_slugs insert failed', slugErr);
+
     // Default qty=1 for any item with null qty (so the user just fills prices)
     const itemsNormalized = (quoteJson.items || []).map((it) => ({
       description: it.description,
