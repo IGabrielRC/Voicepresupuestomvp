@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Mic, MicOff, X, Loader2, RotateCcw, Send } from 'lucide-react';
+import { api } from '../lib/api';
 
 type State = 'idle' | 'recording' | 'recorded' | 'processing';
 
@@ -92,20 +93,16 @@ export default function VoiceRecorder({ onClose }: { onClose: () => void }) {
     setState('processing');
     setError(null);
     try {
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'voice.webm');
-      const res = await fetch('/api/voice/from-web', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `Error ${res.status}`);
-      }
-      const { edit_url, quote_id } = await res.json();
+      const { edit_url, quote_id } = await api.uploadVoice(audioBlob);
       window.location.href = edit_url || `/q/${quote_id}`;
     } catch (e: any) {
-      setError(e?.message || 'No se pudo procesar el audio.');
+      const raw = e?.message || '';
+      const friendly = raw.includes('405')
+        ? 'El envío de audio no está disponible desde esta página. Probá usando el bot de Telegram.'
+        : raw.includes('429') || raw.toLowerCase().includes('too_many_requests')
+        ? 'Estamos recibiendo muchos audios. Esperá unos segundos y probá de nuevo.'
+        : raw || 'No se pudo procesar el audio. Probá de nuevo.';
+      setError(friendly);
       setState('recorded');
     }
   }

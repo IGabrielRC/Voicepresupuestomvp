@@ -106,10 +106,10 @@ async function handleCallbackQuery(callbackQuery: any) {
     return;
   }
 
-  if (data === 'create_new') {
+  if (data === 'create_new' || data === 'record_voice') {
     await sendMessage(
       chatId,
-      `Mandame una <b>nota de voz</b> con el detalle del nuevo presupuesto. ` +
+      `Mandame una <b>nota de voz</b> contando el presupuesto. ` +
         `Te paso el link al editor en unos segundos. 🎙️`
     ).catch(() => {});
     return;
@@ -174,7 +174,7 @@ async function listRecentQuotes(chatId: number, telegramUserId: number) {
     await sendMessage(
       chatId,
       `📋 Todavía no tenés presupuestos. Mandame una nota de voz y empezamos.`,
-      { inline_keyboard: [[{ text: '🎙️ Grabar nota de voz', url: `${WEB_URL}/` }]] }
+      { inline_keyboard: [[{ text: '🎙️ Grabar nota de voz', callback_data: 'record_voice' }]] }
     ).catch(() => {});
     return;
   }
@@ -190,7 +190,7 @@ async function listRecentQuotes(chatId: number, telegramUserId: number) {
     await sendMessage(
       chatId,
       `📋 Todavía no tenés presupuestos. Mandame una nota de voz y empezamos.`,
-      { inline_keyboard: [[{ text: '🎙️ Grabar nota de voz', url: `${WEB_URL}/` }]] }
+      { inline_keyboard: [[{ text: '🎙️ Grabar nota de voz', callback_data: 'record_voice' }]] }
     ).catch(() => {});
     return;
   }

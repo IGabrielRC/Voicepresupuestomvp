@@ -204,7 +204,7 @@ quotesRouter.post('/quotes/slug/:slug/respond', async (req: Request, res: Respon
         {
           inline_keyboard: [
             [{ text: '📝 Ver y editar', url: editUrl }],
-            [{ text: '➕ Crear nuevo', url: `${env.WEB_BASE_URL}/` }],
+            [{ text: '➕ Crear nuevo', callback_data: 'create_new' }],
           ],
         }
       );

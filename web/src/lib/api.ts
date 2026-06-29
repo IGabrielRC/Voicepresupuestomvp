@@ -4,14 +4,30 @@ import type { Quote, QuoteItem, ContractorProfile, ClientResponse } from './type
 // In production, set VITE_API_URL=https://api.your-domain.com
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
 
+async function parseError(res: Response): Promise<string> {
+  const text = await res.text();
+  if (!text) return `Error ${res.status}`;
+  if (text.trim().startsWith('<')) {
+    return `Error ${res.status} del servidor. Probá de nuevo en unos segundos.`;
+  }
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed.message) return parsed.message;
+    if (parsed.error) return parsed.error;
+  } catch {
+    /* fall through to raw text */
+  }
+  return text;
+}
+
 async function jsonFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${url}`, {
     ...options,
     headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
   });
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`${res.status} ${text}`);
+    const message = await parseError(res);
+    throw new Error(message);
   }
   return res.json();
 }
@@ -92,4 +108,19 @@ export const api = {
         item_count: number;
       }>;
     }>(`/api/contractors/by-telegram/${tgUserId}`),
+
+  uploadVoice: (audio: Blob) => {
+    const formData = new FormData();
+    formData.append('audio', audio, 'voice.webm');
+    return fetch(`${BASE}/api/voice/from-web`, {
+      method: 'POST',
+      body: formData,
+    }).then(async (res) => {
+      if (!res.ok) {
+        const message = await parseError(res);
+        throw new Error(message);
+      }
+      return res.json() as Promise<{ edit_url: string; quote_id: string }>;
+    });
+  },
 };

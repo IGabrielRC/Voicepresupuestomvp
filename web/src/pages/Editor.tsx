@@ -14,6 +14,7 @@ import {
   Lock,
   MoreVertical,
   Send,
+  AlertCircle,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import type { Quote, QuoteItem, ClientResponse } from '../lib/types';
@@ -61,6 +62,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
   const [saved, setSaved] = useState(false);
   const [autoSavedAt, setAutoSavedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -71,6 +73,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
   const [editToken, setEditToken] = useState<string | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const lastSavedRef = useRef<string>('');
+  const lastManualSaveAt = useRef<number>(0);
   const locked = quote?.client_response === 'accepted';
 
   useEffect(() => {
@@ -111,23 +114,29 @@ export default function Editor({ quoteId }: { quoteId: string }) {
       });
   }, [quoteId]);
 
-  // Auto-save: 5s after the last change. Skips locked quotes and unchanged state.
+  // Auto-save: 5s after the last change. Skips locked quotes, unchanged state,
+  // active saves, and a short cooldown after a manual save (to avoid 429s).
   useEffect(() => {
-    if (loading || !quote || locked) return;
+    if (loading || !quote || locked || saving) return;
     const currentJson = JSON.stringify({ q: quote, i: items });
     if (currentJson === lastSavedRef.current) return;
+    const sinceManualSave = Date.now() - lastManualSaveAt.current;
+    if (sinceManualSave < 2500) return;
     const timer = setTimeout(() => {
       save(true);
     }, 5000);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quote, items, loading, locked]);
+  }, [quote, items, loading, locked, saving]);
 
   async function save(isAuto = false) {
     if (!quote || locked || !editToken) return;
     setSaving(true);
-    if (!isAuto) setSaved(false);
-    setError(null);
+    if (!isAuto) {
+      setSaved(false);
+      lastManualSaveAt.current = Date.now();
+    }
+    setSaveError(null);
     try {
       const { quote: q, items: its } = await api.patchQuote(
         quote.id,
@@ -153,7 +162,17 @@ export default function Editor({ quoteId }: { quoteId: string }) {
         setTimeout(() => setSaved(false), 2500);
       }
     } catch (e: any) {
-      setError(e?.message || 'Error al guardar.');
+      const raw = e?.message || '';
+      const is429 =
+        raw.includes('429') || raw.toLowerCase().includes('too_many_requests');
+      const message =
+        is429
+          ? 'Demasiados guardados seguidos. Esperá unos segundos y probá de nuevo.'
+          : raw || 'No se pudo guardar. Probá de nuevo.';
+      setSaveError(message);
+      window.setTimeout(() => {
+        setSaveError((current) => (current === message ? null : current));
+      }, 5000);
     } finally {
       setSaving(false);
     }
@@ -220,7 +239,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
       setMenuOpen(false);
       setDeleted(true);
     } catch (e: any) {
-      setError(e?.message || 'No se pudo eliminar.');
+      setSaveError(e?.message || 'No se pudo eliminar.');
       setDeleting(false);
     }
   }
@@ -387,6 +406,15 @@ export default function Editor({ quoteId }: { quoteId: string }) {
           </div>
         </div>
       </div>
+
+      {saveError && (
+        <div className="bg-amber-50 border-b border-amber-200">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-2.5 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-800 leading-relaxed">{saveError}</p>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         {quote.client_response && quote.client_response !== 'pending' && (
