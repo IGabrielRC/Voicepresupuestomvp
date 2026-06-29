@@ -1,19 +1,33 @@
 name: Deploy to Easypanel VPS
 
+# Hardened deploy workflow: pre-flight validation, exact-commit checkout,
+# sequential backend-then-frontend deploy, deterministic health + smoke
+# gates, and per-service automatic rollback. Easypanel/Swarm/Traefik are
+# untouched; only this workflow file changes.
+
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Commit SHA to deploy; defaults to triggering SHA
+        required: false
 
 permissions:
   contents: read
 
 env:
+  # Hardcoded defaults are intentional: a missing/misnamed value fails the
+  # pre-flight checks loudly instead of silently deploying the wrong target.
   APP_DIR: /opt/voicequote-source
   REPO_URL: https://github.com/IGabrielRC/Voicepresupuestomvp.git
   BACKEND_IMAGE: easypanel/presupuesto_mvp/presupuesto_back:latest
   FRONTEND_IMAGE: easypanel/presupuesto_mvp/presupuesto_front:latest
   BACKEND_SERVICE: presupuesto_mvp_presupuesto_back
   FRONTEND_SERVICE: presupuesto_mvp_presupuesto_front
+  BACKEND_SMOKE_URL: https://presupuesto-mvp-presupuesto-back.fwtktk.easypanel.host/api/health
+  FRONTEND_SMOKE_URL: https://presupuesto-mvp-presupuesto-front.fwtktk.easypanel.host
   VPS_KNOWN_HOST: 72.60.28.69 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOJKdY+rQT7Dx9D8oGxPlClta2L/S0ybTJ2NhQj+cMVO
 
 concurrency:
@@ -24,6 +38,17 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve deploy commit
+        run: |
+          set -euo pipefail
+          DEPLOY_SHA="${{ inputs.commit_sha || github.sha }}"
+          if [ -z "$DEPLOY_SHA" ]; then
+            echo "ERROR: could not resolve deploy commit SHA." >&2
+            exit 1
+          fi
+          echo "Deploy commit: $DEPLOY_SHA"
+          echo "DEPLOY_SHA=$DEPLOY_SHA" >> "$GITHUB_ENV"
+
       - name: Prepare SSH
         env:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
@@ -33,15 +58,15 @@ jobs:
           set -euo pipefail
 
           if [ -z "$VPS_HOST" ]; then
-            echo "VPS_HOST GitHub secret is required"
+            echo "ERROR: VPS_HOST GitHub secret is required." >&2
             exit 1
           fi
           if [ -z "$VPS_USER" ]; then
-            echo "VPS_USER GitHub secret is required"
+            echo "ERROR: VPS_USER GitHub secret is required." >&2
             exit 1
           fi
           if [ -z "$VPS_SSH_KEY" ]; then
-            echo "VPS_SSH_KEY GitHub secret is required"
+            echo "ERROR: VPS_SSH_KEY GitHub secret is required." >&2
             exit 1
           fi
 
@@ -51,55 +76,156 @@ jobs:
           chmod 600 ~/.ssh/vps_deploy_key
 
           printf '%s\n' "$VPS_KNOWN_HOST" > ~/.ssh/known_hosts
-          ssh -i ~/.ssh/vps_deploy_key -o BatchMode=yes -o ConnectTimeout=20 "$VPS_USER@$VPS_HOST" "echo ssh-ok"
+          if ! ssh -i ~/.ssh/vps_deploy_key -o BatchMode=yes -o ConnectTimeout=20 "$VPS_USER@$VPS_HOST" "echo ssh-ok"; then
+            echo "ERROR: VPS unreachable via SSH." >&2
+            exit 1
+          fi
 
       - name: Deploy exact commit to VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
-          EXPECTED_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
 
           if [ -z "$VITE_API_URL" ]; then
-            echo "VITE_API_URL GitHub secret is required"
+            echo "ERROR: VITE_API_URL GitHub secret is required." >&2
+            exit 1
+          fi
+          if [ -z "$DEPLOY_SHA" ]; then
+            echo "ERROR: DEPLOY_SHA is empty; aborting deploy." >&2
             exit 1
           fi
 
           VITE_API_URL_B64="$(printf '%s' "$VITE_API_URL" | base64 -w 0)"
 
           ssh -i ~/.ssh/vps_deploy_key "$VPS_USER@$VPS_HOST" \
-            "APP_DIR='$APP_DIR' REPO_URL='$REPO_URL' BACKEND_IMAGE='$BACKEND_IMAGE' FRONTEND_IMAGE='$FRONTEND_IMAGE' BACKEND_SERVICE='$BACKEND_SERVICE' FRONTEND_SERVICE='$FRONTEND_SERVICE' VITE_API_URL_B64='$VITE_API_URL_B64' EXPECTED_SHA='$EXPECTED_SHA' bash -s" <<'REMOTE'
+            "APP_DIR='$APP_DIR' REPO_URL='$REPO_URL' BACKEND_IMAGE='$BACKEND_IMAGE' FRONTEND_IMAGE='$FRONTEND_IMAGE' BACKEND_SERVICE='$BACKEND_SERVICE' FRONTEND_SERVICE='$FRONTEND_SERVICE' BACKEND_SMOKE_URL='$BACKEND_SMOKE_URL' FRONTEND_SMOKE_URL='$FRONTEND_SMOKE_URL' VITE_API_URL_B64='$VITE_API_URL_B64' DEPLOY_SHA='$DEPLOY_SHA' bash -s" <<'REMOTE'
             set -euo pipefail
 
             VITE_API_URL="$(printf '%s' "$VITE_API_URL_B64" | base64 -d)"
 
-            mkdir -p "$APP_DIR"
-            if [ ! -d "$APP_DIR/.git" ]; then
-              git clone "$REPO_URL" "$APP_DIR"
-            fi
-
-            cd "$APP_DIR"
-            git fetch origin main
-            git reset --hard "$EXPECTED_SHA"
-            git clean -fdx
-
-            ACTUAL_SHA="$(git rev-parse HEAD)"
-            if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
-              echo "VPS source mismatch: expected $EXPECTED_SHA but got $ACTUAL_SHA"
+            # --- Remote shell helpers ---
+            fail() {
+              echo "ERROR: $*" >&2
               exit 1
-            fi
+            }
 
+            require_cmd() {
+              command -v "$1" >/dev/null 2>&1 || fail "Missing required command on VPS: $1"
+            }
+
+            inspect_service() {
+              local svc="$1"
+              if ! docker service inspect "$svc" >/dev/null 2>&1; then
+                fail "Pre-flight failed: Swarm service not found: $svc"
+              fi
+            }
+
+            checkout_commit() {
+              echo "Checking out exact commit $DEPLOY_SHA in $APP_DIR"
+              mkdir -p "$APP_DIR"
+              if [ ! -d "$APP_DIR/.git" ]; then
+                git clone "$REPO_URL" "$APP_DIR"
+              fi
+              cd "$APP_DIR"
+              git fetch origin "$DEPLOY_SHA" 2>/dev/null || git fetch origin main
+              git reset --hard "$DEPLOY_SHA"
+              git clean -fdx
+              local actual
+              actual="$(git rev-parse HEAD)"
+              if [ "$actual" != "$DEPLOY_SHA" ]; then
+                fail "Source checkout mismatch: expected $DEPLOY_SHA but got $actual"
+              fi
+              echo "OK: source tree is at $actual"
+            }
+
+            wait_service_running() {
+              local svc="$1" timeout="${2:-180}" elapsed=0 state
+              echo "Waiting for $svc to reach Running state (timeout ${timeout}s)..."
+              while [ "$elapsed" -lt "$timeout" ]; do
+                state="$(docker service ps "$svc" --filter desired-state=running --format '{{.CurrentState}} {{.Error}}' 2>/dev/null | head -n1 || true)"
+                if printf '%s' "$state" | grep -q '^Running'; then
+                  echo "OK: $svc reports: $state"
+                  return 0
+                fi
+                sleep 5
+                elapsed=$((elapsed + 5))
+              done
+              echo "ERROR: $svc did not reach Running within ${timeout}s." >&2
+              echo "Current task state for $svc:" >&2
+              docker service ps --no-trunc "$svc" >&2 || true
+              return 1
+            }
+
+            rollback_service() {
+              local svc="$1" label="$2"
+              echo "ROLLBACK: reverting $label ($svc) to previous state..."
+              if ! docker service update --rollback "$svc"; then
+                echo "ERROR: Rollback failed for $label ($svc); manual intervention required." >&2
+              fi
+            }
+
+            # deploy_service <label> <service> <image> <smoke_url> <smoke_mode:get|head>
+            deploy_service() {
+              local label="$1" svc="$2" image="$3" smoke_url="$4" smoke_mode="$5"
+              echo "=== Deploy $label ($svc) ==="
+
+              if ! docker service update --detach=false --force --image "$image" "$svc"; then
+                rollback_service "$svc" "$label"
+                fail "$label update failed for $svc; rollback attempted."
+              fi
+
+              if ! wait_service_running "$svc"; then
+                rollback_service "$svc" "$label"
+                fail "$label health check failed for $svc; rollback attempted. See task state above."
+              fi
+
+              echo "Smoke check ($smoke_mode): $smoke_url"
+              if [ "$smoke_mode" = "head" ]; then
+                if ! curl -fsSI --max-time 30 "$smoke_url" >/dev/null; then
+                  rollback_service "$svc" "$label"
+                  fail "$label smoke check failed ($smoke_url); rollback attempted."
+                fi
+              else
+                if ! curl -fsS --max-time 30 "$smoke_url" >/dev/null; then
+                  rollback_service "$svc" "$label"
+                  fail "$label smoke check failed ($smoke_url); rollback attempted."
+                fi
+              fi
+              echo "OK: $label updated, healthy, and reachable."
+            }
+
+            # --- Phase 1: Pre-flight validation ---
+            # Abort point: any failure here stops before checkout/build/update.
+            echo "=== Pre-flight validation ==="
+            require_cmd git
+            require_cmd docker
+            require_cmd curl
+            inspect_service "$BACKEND_SERVICE"
+            inspect_service "$FRONTEND_SERVICE"
+            echo "OK: all pre-flight checks passed (commands present, services exist)."
+
+            # --- Phase 2: Exact commit checkout ---
+            # Abort point: SHA mismatch fails before any image is built.
+            echo "=== Source checkout ==="
+            checkout_commit
+
+            # --- Phase 3: Sequential deploy (backend first, then frontend) ---
+            # Backend is a hard dependency for frontend: a backend build/update
+            # or health failure blocks the frontend work entirely.
+            echo "=== Deploy backend (1/2) ==="
+            echo "Building backend image..."
             docker build -t "$BACKEND_IMAGE" -f Dockerfile.backend .
+            deploy_service "backend" "$BACKEND_SERVICE" "$BACKEND_IMAGE" "$BACKEND_SMOKE_URL" "get"
+
+            echo "=== Deploy frontend (2/2) ==="
+            echo "Building frontend image..."
             docker build -t "$FRONTEND_IMAGE" -f Dockerfile.web --build-arg VITE_API_URL="$VITE_API_URL" .
+            deploy_service "frontend" "$FRONTEND_SERVICE" "$FRONTEND_IMAGE" "$FRONTEND_SMOKE_URL" "head"
 
-            docker service update --detach=false --force --image "$BACKEND_IMAGE" "$BACKEND_SERVICE"
-            docker service update --detach=false --force --image "$FRONTEND_IMAGE" "$FRONTEND_SERVICE"
-
-            docker service ps "$BACKEND_SERVICE" --filter desired-state=running --format '{{.CurrentState}} {{.Error}}' | grep -q '^Running'
-            docker service ps "$FRONTEND_SERVICE" --filter desired-state=running --format '{{.CurrentState}} {{.Error}}' | grep -q '^Running'
-
-            curl -fsS "https://presupuesto-mvp-presupuesto-back.fwtktk.easypanel.host/api/health"
-            curl -fsSI "https://presupuesto-mvp-presupuesto-front.fwtktk.easypanel.host" >/dev/null
+            # --- Phase 4: Summary ---
+            echo "=== Deploy complete: $DEPLOY_SHA ==="
+            echo "Backend then frontend updated, verified healthy, and reachable."
           REMOTE
