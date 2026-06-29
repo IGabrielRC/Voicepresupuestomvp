@@ -14,34 +14,58 @@ env:
   FRONTEND_IMAGE: easypanel/presupuesto_mvp/presupuesto_front:latest
   BACKEND_SERVICE: presupuesto_mvp_presupuesto_back
   FRONTEND_SERVICE: presupuesto_mvp_presupuesto_front
+  VPS_HOST_KEY_FINGERPRINT: SHA256:cyDRIhuBU4RAAVa8m7YOUkjivcfkDy3MggLYoxGI/Yg
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to VPS via SSH
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Prepare SSH
         env:
-          APP_DIR: ${{ env.APP_DIR }}
-          REPO_URL: ${{ env.REPO_URL }}
-          BACKEND_IMAGE: ${{ env.BACKEND_IMAGE }}
-          FRONTEND_IMAGE: ${{ env.FRONTEND_IMAGE }}
-          BACKEND_SERVICE: ${{ env.BACKEND_SERVICE }}
-          FRONTEND_SERVICE: ${{ env.FRONTEND_SERVICE }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$VPS_HOST" ]; then
+            echo "VPS_HOST GitHub secret is required"
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/vps_deploy_key
+          chmod 600 ~/.ssh/vps_deploy_key
+
+          ssh-keyscan -t ed25519 "$VPS_HOST" > ~/.ssh/vps_known_hosts
+          ssh-keygen -lf ~/.ssh/vps_known_hosts | grep -F "$VPS_HOST_KEY_FINGERPRINT"
+          cat ~/.ssh/vps_known_hosts >> ~/.ssh/known_hosts
+
+      - name: Deploy exact commit to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          fingerprint: SHA256:cyDRIhuBU4RAAVa8m7YOUkjivcfkDy3MggLYoxGI/Yg
-          envs: APP_DIR,REPO_URL,BACKEND_IMAGE,FRONTEND_IMAGE,BACKEND_SERVICE,FRONTEND_SERVICE,VITE_API_URL
-          script: |
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$VITE_API_URL" ]; then
+            echo "VITE_API_URL GitHub secret is required"
+            exit 1
+          fi
+
+          VITE_API_URL_B64="$(printf '%s' "$VITE_API_URL" | base64 -w 0)"
+
+          ssh -i ~/.ssh/vps_deploy_key "$VPS_USER@$VPS_HOST" \
+            "APP_DIR='$APP_DIR' REPO_URL='$REPO_URL' BACKEND_IMAGE='$BACKEND_IMAGE' FRONTEND_IMAGE='$FRONTEND_IMAGE' BACKEND_SERVICE='$BACKEND_SERVICE' FRONTEND_SERVICE='$FRONTEND_SERVICE' VITE_API_URL_B64='$VITE_API_URL_B64' EXPECTED_SHA='$EXPECTED_SHA' bash -s" <<'REMOTE'
             set -euo pipefail
 
-            if [ -z "$VITE_API_URL" ]; then
-              echo "VITE_API_URL GitHub secret is required"
-              exit 1
-            fi
+            VITE_API_URL="$(printf '%s' "$VITE_API_URL_B64" | base64 -d)"
 
             mkdir -p "$APP_DIR"
             if [ ! -d "$APP_DIR/.git" ]; then
@@ -50,10 +74,24 @@ jobs:
 
             cd "$APP_DIR"
             git fetch origin main
-            git reset --hard origin/main
+            git reset --hard "$EXPECTED_SHA"
+            git clean -fdx
+
+            ACTUAL_SHA="$(git rev-parse HEAD)"
+            if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+              echo "VPS source mismatch: expected $EXPECTED_SHA but got $ACTUAL_SHA"
+              exit 1
+            fi
 
             docker build -t "$BACKEND_IMAGE" -f Dockerfile.backend .
             docker build -t "$FRONTEND_IMAGE" -f Dockerfile.web --build-arg VITE_API_URL="$VITE_API_URL" .
 
-            docker service update --force --image "$BACKEND_IMAGE" "$BACKEND_SERVICE"
-            docker service update --force --image "$FRONTEND_IMAGE" "$FRONTEND_SERVICE"
+            docker service update --detach=false --force --image "$BACKEND_IMAGE" "$BACKEND_SERVICE"
+            docker service update --detach=false --force --image "$FRONTEND_IMAGE" "$FRONTEND_SERVICE"
+
+            docker service ps "$BACKEND_SERVICE" --filter desired-state=running --format '{{.CurrentState}} {{.Error}}' | grep -q '^Running'
+            docker service ps "$FRONTEND_SERVICE" --filter desired-state=running --format '{{.CurrentState}} {{.Error}}' | grep -q '^Running'
+
+            curl -fsS "https://presupuesto-mvp-presupuesto-back.fwtktk.easypanel.host/api/health"
+            curl -fsSI "https://presupuesto-mvp-presupuesto-front.fwtktk.easypanel.host" >/dev/null
+          REMOTE
