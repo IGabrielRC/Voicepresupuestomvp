@@ -58,10 +58,11 @@ export const api = {
   getProfile: (contractorId: string) =>
     jsonFetch<{ profile: ContractorProfile | null }>(`/api/contractors/${contractorId}/profile`),
 
-  patchProfile: (contractorId: string, body: Partial<ContractorProfile>) =>
+  patchProfile: (contractorId: string, body: Partial<ContractorProfile>, token?: string) =>
     jsonFetch<{ profile: ContractorProfile }>(`/api/contractors/${contractorId}/profile`, {
       method: 'PATCH',
       body: JSON.stringify(body),
+      headers: authHeaders(token),
     }),
 
   simulateVoice: (

@@ -93,6 +93,16 @@ export default function Editor({ quoteId }: { quoteId: string }) {
         setQuote(quote);
         setItems(items.sort((a, b) => a.sort_order - b.sort_order));
         lastSavedRef.current = JSON.stringify({ q: quote, i: items });
+        if (quote.contractor_id) {
+          try {
+            sessionStorage.setItem(
+              `voicequote:last-edit-url:${quote.contractor_id}`,
+              window.location.pathname + window.location.search
+            );
+          } catch {
+            /* ignore storage errors */
+          }
+        }
         setLoading(false);
       })
       .catch((e) => {
@@ -304,13 +314,15 @@ export default function Editor({ quoteId }: { quoteId: string }) {
             ← Inicio
           </a>
           <div className="flex items-center gap-2">
-            <button
+            <Button
               onClick={() => setShareOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
             >
               <Share2 className="w-4 h-4" />
               <span className="hidden sm:inline">Compartir</span>
-            </button>
+            </Button>
             <div className="relative">
               <button
                 onClick={() => setMenuOpen((o) => !o)}
@@ -347,10 +359,11 @@ export default function Editor({ quoteId }: { quoteId: string }) {
                     Autoguardado · {autoSavedAt.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 )}
-                <button
+                <Button
                   onClick={() => save(false)}
                   disabled={saving}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-50 transition-colors"
+                  size="sm"
+                  className="gap-1.5"
                 >
                   {saving ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -359,8 +372,10 @@ export default function Editor({ quoteId }: { quoteId: string }) {
                   ) : (
                     <Save className="w-4 h-4" />
                   )}
-                  {saving ? 'Guardando...' : saved ? 'Guardado' : 'Guardar'}
-                </button>
+                  <span className="hidden sm:inline">
+                    {saving ? 'Guardando...' : saved ? 'Guardado' : 'Guardar'}
+                  </span>
+                </Button>
               </div>
             )}
             {locked && (
@@ -389,6 +404,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
         )}
 
         <input
+          id="client-name"
           type="text"
           value={quote.client_name || ''}
           onChange={(e) => setQuote({ ...quote, client_name: e.target.value })}
@@ -399,29 +415,18 @@ export default function Editor({ quoteId }: { quoteId: string }) {
 
         <section className="bg-white rounded-xl border border-slate-200 p-5">
           <h2 className="text-sm font-semibold text-slate-900 mb-4">Cliente</h2>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Nombre</label>
-              <input
-                type="text"
-                value={quote.client_name || ''}
-                onChange={(e) => setQuote({ ...quote, client_name: e.target.value })}
-                disabled={locked}
-                className={inputBase}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                Contacto (teléfono, email, dirección)
-              </label>
-              <input
-                type="text"
-                value={quote.client_contact || ''}
-                onChange={(e) => setQuote({ ...quote, client_contact: e.target.value })}
-                disabled={locked}
-                className={inputBase}
-              />
-            </div>
+          <div>
+            <label htmlFor="client-contact" className="block text-xs font-medium text-slate-600 mb-1">
+              Contacto (teléfono, email, dirección)
+            </label>
+            <input
+              id="client-contact"
+              type="text"
+              value={quote.client_contact || ''}
+              onChange={(e) => setQuote({ ...quote, client_contact: e.target.value })}
+              disabled={locked}
+              className={inputBase}
+            />
           </div>
         </section>
 
@@ -559,8 +564,9 @@ export default function Editor({ quoteId }: { quoteId: string }) {
           <h2 className="text-sm font-semibold text-slate-900 mb-4">Configuración</h2>
           <div className="grid sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Moneda</label>
+              <label htmlFor="currency" className="block text-xs font-medium text-slate-600 mb-1">Moneda</label>
               <select
+                id="currency"
                 value={quote.currency}
                 onChange={(e) => setQuote({ ...quote, currency: e.target.value })}
                 disabled={locked}
@@ -576,8 +582,9 @@ export default function Editor({ quoteId }: { quoteId: string }) {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Validez (días)</label>
+              <label htmlFor="validity-days" className="block text-xs font-medium text-slate-600 mb-1">Validez (días)</label>
               <input
+                id="validity-days"
                 type="number"
                 value={quote.validity_days ?? ''}
                 onChange={(e) =>
@@ -592,10 +599,11 @@ export default function Editor({ quoteId }: { quoteId: string }) {
             </div>
           </div>
           <div className="mt-4">
-            <label className="block text-xs font-medium text-slate-600 mb-1">
+            <label htmlFor="terms" className="block text-xs font-medium text-slate-600 mb-1">
               Términos y condiciones
             </label>
             <textarea
+              id="terms"
               value={quote.terms || ''}
               onChange={(e) => setQuote({ ...quote, terms: e.target.value })}
               rows={3}
@@ -604,8 +612,9 @@ export default function Editor({ quoteId }: { quoteId: string }) {
             />
           </div>
           <div className="mt-4">
-            <label className="block text-xs font-medium text-slate-600 mb-1">Notas</label>
+            <label htmlFor="notes" className="block text-xs font-medium text-slate-600 mb-1">Notas</label>
             <textarea
+              id="notes"
               value={quote.notes || ''}
               onChange={(e) => setQuote({ ...quote, notes: e.target.value })}
               rows={2}
@@ -616,7 +625,10 @@ export default function Editor({ quoteId }: { quoteId: string }) {
         </section>
 
         <div className="text-center text-xs text-slate-400 pt-4">
-          <a href={`/p/${quote.contractor_id}`} className="hover:text-slate-600">
+          <a
+            href={`/p/${quote.contractor_id}?t=${editToken}`}
+            className="hover:text-slate-600"
+          >
             Editar mi perfil de empresa →
           </a>
         </div>

@@ -17,6 +17,16 @@ import { formatCurrency, formatDate, isExpired } from '../lib/format';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const RESPONSE_LABELS: Record<
   ClientResponse,
@@ -41,6 +51,7 @@ export default function PublicQuote({ slug }: { slug: string }) {
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<ClientResponse>('pending');
   const [responding, setResponding] = useState<Exclude<ClientResponse, 'pending'> | null>(null);
+  const [rejectOpen, setRejectOpen] = useState(false);
 
   useEffect(() => {
     api
@@ -109,6 +120,11 @@ export default function PublicQuote({ slug }: { slug: string }) {
     }
   }
 
+  function confirmReject() {
+    setRejectOpen(false);
+    respond('rejected');
+  }
+
   function shareWhatsapp() {
     const url = encodeURIComponent(window.location.href);
     const text = encodeURIComponent(
@@ -142,7 +158,6 @@ export default function PublicQuote({ slug }: { slug: string }) {
   const calculatedTotal = items.reduce((s, it) => s + (it.line_total || 0), 0);
   const effectiveTotal = quote.total_override != null ? quote.total_override : calculatedTotal;
   const totalStr = formatCurrency(effectiveTotal, quote.currency);
-  const totalAdjusted = quote.total_override != null && quote.total_override !== calculatedTotal;
   const expired = isExpired(quote.expires_at);
   const businessName = profile?.business_name || 'Tu empresa';
   const quoteNumber = quote.id.slice(0, 8).toUpperCase();
@@ -175,7 +190,7 @@ export default function PublicQuote({ slug }: { slug: string }) {
               Expirado
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium ring-1 ring-emerald-200">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-medium ring-1 ring-indigo-200">
               <Clock className="w-3.5 h-3.5" />
               Vigente
             </span>
@@ -343,9 +358,6 @@ export default function PublicQuote({ slug }: { slug: string }) {
                 <p className="text-4xl font-bold text-slate-900 mt-2 tracking-tight tabular-nums">
                   {totalStr}
                 </p>
-                {totalAdjusted && (
-                  <p className="text-xs text-slate-400 mt-1">Total ajustado manualmente</p>
-                )}
               </div>
             </div>
           </CardContent>
@@ -421,7 +433,7 @@ export default function PublicQuote({ slug }: { slug: string }) {
                 Pedir cambios
               </Button>
               <Button
-                onClick={() => respond('rejected')}
+                onClick={() => setRejectOpen(true)}
                 disabled={!!responding}
                 variant="ghost"
                 className="h-11 text-slate-400 hover:text-red-600 hover:bg-red-50"
@@ -457,9 +469,48 @@ export default function PublicQuote({ slug }: { slug: string }) {
               {response === 'rejected' && 'El contratista fue notificado por Telegram.'}
               {response === 'changes_requested' && 'El contratista se va a poner en contacto.'}
             </p>
+            {profile?.contact_phone && (
+              <a
+                href={`tel:${profile.contact_phone.replace(/\s/g, '')}`}
+                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200 transition-colors"
+              >
+                <Phone className="w-4 h-4" />
+                Llamar al contratista
+              </a>
+            )}
           </div>
         </div>
       )}
+
+      {/* Reject confirmation */}
+      <AlertDialog open={rejectOpen} onOpenChange={setRejectOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="mx-auto w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-2">
+              <XCircle className="w-6 h-6 text-red-600" />
+            </div>
+            <AlertDialogTitle className="text-center">¿Rechazar el presupuesto?</AlertDialogTitle>
+            <AlertDialogDescription className="text-center">
+              Si rechazás, se le avisa al contratista por Telegram. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!responding}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmReject}
+              disabled={!!responding}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {responding === 'rejected' ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <XCircle className="w-4 h-4 mr-2" />
+              )}
+              Sí, rechazar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

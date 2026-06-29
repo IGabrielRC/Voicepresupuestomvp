@@ -24,12 +24,14 @@ function isSafeSvg(svgText: string): boolean {
 function validateLogoUrl(logoUrl: unknown): string | null {
   if (logoUrl === undefined || logoUrl === null || logoUrl === '') return null;
   if (typeof logoUrl !== 'string') return 'logo_url debe ser string';
-  if (logoUrl.length > MAX_LOGO_URL_LENGTH)
-    return `logo_url excede ${MAX_LOGO_URL_LENGTH} caracteres`;
 
   if (/[\x00-\x1f\x7f]/.test(logoUrl)) return 'logo_url contiene caracteres inválidos';
 
-  if (/^https?:\/\//i.test(logoUrl)) return null;
+  if (/^https?:\/\//i.test(logoUrl)) {
+    if (logoUrl.length > MAX_LOGO_URL_LENGTH)
+      return `logo_url excede ${MAX_LOGO_URL_LENGTH} caracteres`;
+    return null;
+  }
 
   if (logoUrl.startsWith('data:')) {
     const commaIdx = logoUrl.indexOf(',');
@@ -63,7 +65,35 @@ function validateLogoUrl(logoUrl: unknown): string | null {
     return null;
   }
 
+  if (logoUrl.length > MAX_LOGO_URL_LENGTH)
+    return `logo_url excede ${MAX_LOGO_URL_LENGTH} caracteres`;
+
   return 'logo_url debe ser una URL https/http o una imagen en base64';
+}
+
+function getRequestEditToken(req: Request): string | null {
+  const header = req.headers['x-edit-token'];
+  if (typeof header === 'string' && header.length > 0) return header;
+  if (Array.isArray(header) && typeof header[0] === 'string' && header[0].length > 0)
+    return header[0];
+  return null;
+}
+
+async function authorizeProfileEdit(req: Request, contractorId: string): Promise<boolean> {
+  const token = getRequestEditToken(req);
+  if (!token) return false;
+
+  const { data, error } = await supabase
+    .from('quotes')
+    .select('id')
+    .eq('contractor_id', contractorId)
+    .eq('edit_token', token)
+    .limit(1);
+  if (error) {
+    console.error('[authorizeProfileEdit] supabase error', error);
+    return false;
+  }
+  return Array.isArray(data) && data.length > 0;
 }
 
 contractorsRouter.get('/contractors/:id/profile', async (req: Request, res: Response) => {
@@ -77,6 +107,9 @@ contractorsRouter.get('/contractors/:id/profile', async (req: Request, res: Resp
 });
 
 contractorsRouter.patch('/contractors/:id/profile', async (req: Request, res: Response) => {
+  const authorized = await authorizeProfileEdit(req, req.params.id);
+  if (!authorized) return res.status(403).json({ error: 'invalid_edit_token' });
+
   const { business_name, logo_url, contact_phone, contact_email, address, terms, default_currency } = req.body;
   const logoError = validateLogoUrl(logo_url);
   if (logoError) return res.status(400).json({ error: logoError });

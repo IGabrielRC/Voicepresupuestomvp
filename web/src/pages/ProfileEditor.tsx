@@ -14,12 +14,19 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
     default_currency: 'USD',
   });
   const welcome = new URLSearchParams(window.location.search).get('welcome') === '1';
+  const editToken = new URLSearchParams(window.location.search).get('t');
+  const canEdit = !!editToken;
   const hasProfile = !!profile.business_name;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [logoError, setLogoError] = useState<string | null>(null);
+  const [lastEditUrl, setLastEditUrl] = useState<string | null>(null);
+  const [urlCheck, setUrlCheck] = useState<{
+    status: 'idle' | 'checking' | 'valid' | 'invalid';
+    error: string | null;
+  }>({ status: 'idle', error: null });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const MAX_LOGO_BYTES = 1024 * 1024;
@@ -40,11 +47,22 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
     return true;
   }
 
+  function isValidEditUrl(url: string | null): url is string {
+    if (!url) return false;
+    if (!url.startsWith('/q/')) return false;
+    // Reject any scheme/protocol indicator anywhere in the URL.
+    if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return false;
+    if (url.includes('://')) return false;
+    return true;
+  }
+
   function validateLogoUrl(value: string): string | null {
     if (!value) return null;
-    if (value.length > MAX_LOGO_URL_LENGTH)
-      return `El enlace supera ${MAX_LOGO_URL_LENGTH} caracteres.`;
-    if (/^https?:\/\//i.test(value)) return null;
+    if (/^https?:\/\//i.test(value)) {
+      if (value.length > MAX_LOGO_URL_LENGTH)
+        return `El enlace supera ${MAX_LOGO_URL_LENGTH} caracteres.`;
+      return null;
+    }
     if (value.startsWith('data:')) {
       const commaIdx = value.indexOf(',');
       if (commaIdx === -1) return 'URL de datos inválida.';
@@ -66,7 +84,33 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
       }
       return null;
     }
+    if (value.length > MAX_LOGO_URL_LENGTH)
+      return `El enlace supera ${MAX_LOGO_URL_LENGTH} caracteres.`;
     return 'El enlace debe ser http, https o una imagen en base64.';
+  }
+
+  function validateRemoteImageUrl(value: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const timer = setTimeout(() => {
+        img.src = '';
+        resolve('El enlace no respondió como imagen (timeout).');
+      }, 8000);
+
+      img.onload = () => {
+        clearTimeout(timer);
+        resolve(null);
+      };
+
+      img.onerror = () => {
+        clearTimeout(timer);
+        resolve(
+          'No se pudo cargar la imagen. Revisá que el enlace sea público y sea una imagen.'
+        );
+      };
+
+      img.src = value;
+    });
   }
 
   function setLogoUrl(value: string) {
@@ -97,9 +141,73 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
 
   function clearLogo() {
     setLogoError(null);
+    setUrlCheck({ status: 'idle', error: null });
     setProfile((p) => ({ ...p, logo_url: '' }));
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
+
+  useEffect(() => {
+    const value = profile.logo_url || '';
+    if (!value || !/^https?:\/\//i.test(value)) {
+      setUrlCheck({ status: 'idle', error: null });
+      return;
+    }
+    setUrlCheck({ status: 'checking', error: null });
+    let cancelled = false;
+    let img: HTMLImageElement | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const debounce = setTimeout(() => {
+      if (cancelled) return;
+      img = new Image();
+      timer = setTimeout(() => {
+        if (cancelled || !img) return;
+        cancelled = true;
+        img.src = '';
+        img = null;
+        setUrlCheck({
+          status: 'invalid',
+          error: 'El enlace no respondió como imagen (timeout).',
+        });
+      }, 8000);
+      img.onload = () => {
+        if (cancelled) return;
+        if (timer) clearTimeout(timer);
+        cancelled = true;
+        img = null;
+        setUrlCheck({ status: 'valid', error: null });
+      };
+      img.onerror = () => {
+        if (cancelled) return;
+        if (timer) clearTimeout(timer);
+        cancelled = true;
+        img = null;
+        setUrlCheck({
+          status: 'invalid',
+          error:
+            'No se pudo cargar la imagen. Revisá que el enlace sea público y sea una imagen.',
+        });
+      };
+      img.src = value;
+    }, 450);
+    return () => {
+      cancelled = true;
+      clearTimeout(debounce);
+      if (timer) clearTimeout(timer);
+      if (img) {
+        img.src = '';
+        img = null;
+      }
+    };
+  }, [profile.logo_url]);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(`voicequote:last-edit-url:${contractorId}`);
+      setLastEditUrl(isValidEditUrl(raw) ? raw : null);
+    } catch {
+      setLastEditUrl(null);
+    }
+  }, [contractorId]);
 
   useEffect(() => {
     api
@@ -115,16 +223,39 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
   }, [contractorId]);
 
   async function save() {
-    const logoErr = validateLogoUrl(profile.logo_url || '');
+    if (!editToken) {
+      setError('No se puede guardar: falta el token de edición. Abrí el perfil desde el enlace de un presupuesto.');
+      return;
+    }
+    const value = profile.logo_url || '';
+    const logoErr = validateLogoUrl(value);
     if (logoErr) {
       setLogoError(logoErr);
       return;
     }
+    if (/^https?:\/\//i.test(value)) {
+      if (urlCheck.status !== 'valid') {
+        setLogoError('Verificando imagen...');
+        setUrlCheck({ status: 'checking', error: null });
+        const remoteLogoError = await validateRemoteImageUrl(value);
+        if (remoteLogoError) {
+          setUrlCheck({ status: 'invalid', error: remoteLogoError });
+          setLogoError(remoteLogoError);
+          return;
+        }
+        setUrlCheck({ status: 'valid', error: null });
+        if (profile.logo_url !== value) {
+          setLogoError('El logo cambió mientras se verificaba. Volvé a guardar.');
+          return;
+        }
+      }
+    }
+    setLogoError(null);
     setSaving(true);
     setSaved(false);
     setError(null);
     try {
-      await api.patchProfile(contractorId, profile);
+      await api.patchProfile(contractorId, profile, editToken);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (e: any) {
@@ -149,8 +280,9 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
   ) {
     return (
       <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+        <label htmlFor={key} className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
         <input
+          id={key}
           type={type}
           value={(profile[key] as string) || ''}
           onChange={(e) => setProfile({ ...profile, [key]: e.target.value })}
@@ -164,12 +296,16 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
     <div className="min-h-screen">
       <div className="sticky top-0 z-10 bg-white border-b border-slate-200">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          <a href="/" className="text-sm text-slate-500 hover:text-slate-900">
-            ← Inicio
+          <a
+            href={lastEditUrl || '/'}
+            className="text-sm text-slate-500 hover:text-slate-900"
+          >
+            {lastEditUrl ? '← Volver al presupuesto' : '← Inicio'}
           </a>
           <button
             onClick={save}
-            disabled={saving}
+            disabled={saving || !canEdit}
+            title={canEdit ? 'Guardar cambios' : 'Abrí el perfil desde el enlace de un presupuesto para poder editar'}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
             {saving ? (
@@ -209,13 +345,20 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
           Aparece en cada presupuesto que compartís con tus clientes.
         </p>
 
+        {!canEdit && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            Este perfil se abrió en modo solo lectura. Para editarlo, usá el enlace
+            “Editar mi perfil de empresa” desde un presupuesto o desde el bot de Telegram.
+          </div>
+        )}
+
         {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
         <section className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
           {field('business_name', 'Nombre de tu empresa')}
 
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-2">
+            <label htmlFor="logo-url" className="block text-xs font-medium text-slate-600 mb-2">
               Logo de la empresa
             </label>
             <div className="flex items-center gap-4">
@@ -243,6 +386,7 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
               )}
               <div className="flex-1 space-y-2">
                 <input
+                  id="logo-url"
                   type="text"
                   value={profile.logo_url || ''}
                   onChange={(e) => setLogoUrl(e.target.value)}
@@ -267,7 +411,9 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
                   </label>
                   <span className="text-xs text-slate-400">Máx. 1 MB</span>
                 </div>
-                {logoError && <p className="text-xs text-red-600">{logoError}</p>}
+                {(logoError || urlCheck.error) && (
+                  <p className="text-xs text-red-600">{logoError || urlCheck.error}</p>
+                )}
               </div>
             </div>
           </div>
@@ -276,10 +422,11 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
           {field('contact_email', 'Email', 'email')}
           {field('address', 'Dirección')}
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">
+            <label htmlFor="default-currency" className="block text-xs font-medium text-slate-600 mb-1">
               Moneda por defecto
             </label>
             <select
+              id="default-currency"
               value={profile.default_currency || 'USD'}
               onChange={(e) => setProfile({ ...profile, default_currency: e.target.value })}
               className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
@@ -294,10 +441,11 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">
+            <label htmlFor="terms" className="block text-xs font-medium text-slate-600 mb-1">
               Términos por defecto
             </label>
             <textarea
+              id="terms"
               value={profile.terms || ''}
               onChange={(e) => setProfile({ ...profile, terms: e.target.value })}
               rows={4}

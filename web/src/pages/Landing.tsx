@@ -9,6 +9,7 @@ import {
   Sparkles,
   ArrowRight,
   AlertCircle,
+  Send,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import VoiceRecorder from '../components/VoiceRecorder';
@@ -86,6 +87,15 @@ export default function Landing() {
             >
               <Mic className="w-4 h-4" />
               Grabar nota de voz
+            </Button>
+            <Button
+              onClick={() => window.open('https://t.me/presupuestomvp_bot', '_blank', 'noreferrer')}
+              size="lg"
+              variant="outline"
+              className="border-sky-200 text-sky-600 hover:bg-sky-50 hover:text-sky-700 transition-all"
+            >
+              <Send className="w-4 h-4" />
+              Abrir el bot en Telegram
             </Button>
           </div>
           {error && (
