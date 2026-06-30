@@ -54,6 +54,21 @@
   }
 }
 
+@keyframes item-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-item-enter {
+  animation: item-enter 250ms ease-out;
+}
+
 /* Print styles: clean PDF of the public quote view. */
 @media print {
   .no-print,

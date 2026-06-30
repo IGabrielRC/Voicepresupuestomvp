@@ -5,6 +5,7 @@ export interface QuoteItem {
   unit_price: number | null;
   line_total: number;
   sort_order: number;
+  tempId?: string;
 }
 
 export type ClientResponse = 'pending' | 'accepted' | 'rejected' | 'changes_requested';
@@ -26,6 +27,9 @@ export interface Quote {
   edit_token?: string | null;
   is_active?: boolean | null;
   replaced_by_slug?: string | null;
+  is_expired?: boolean;
+  viewed_at?: string | null;
+  view_count?: number | null;
   created_at: string;
 }
 

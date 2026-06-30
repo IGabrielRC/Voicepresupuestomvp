@@ -1,5 +1,13 @@
 export type ShareMode = 'reissue_changes' | 'reissue_rejected' | 'share_accepted';
 
+export interface QuoteItemLike {
+  description: string | null;
+  qty: number | null;
+  unit_price: number | null;
+  line_total: number;
+  sort_order: number;
+}
+
 export interface QuoteLike {
   id: string;
   contractor_id: string;
@@ -15,13 +23,7 @@ export interface QuoteLike {
   client_response: string;
   total_override: number | null;
   is_active?: boolean | null;
-  quote_items?: Array<{
-    description: string | null;
-    qty: number | null;
-    unit_price: number | null;
-    line_total: number;
-    sort_order: number;
-  }>;
+  quote_items?: Array<QuoteItemLike>;
 }
 
 export function isShareMode(value: unknown): value is ShareMode {
@@ -105,4 +107,40 @@ export function buildCloneItems(
     line_total: it.line_total ?? 0,
     sort_order: it.sort_order ?? i,
   }));
+}
+
+/**
+ * Compares the last saved JSON snapshot with the current quote + items.
+ * Returns true when there are unsaved changes (caller should save before share).
+ */
+export function isQuoteDirty(
+  lastSavedSnapshot: string | null | undefined,
+  quote: Record<string, unknown>,
+  items: Array<Record<string, unknown>>
+): boolean {
+  if (!lastSavedSnapshot) return true;
+  try {
+    return lastSavedSnapshot !== JSON.stringify({ q: quote, i: items });
+  } catch {
+    return true;
+  }
+}
+
+/** Inserts a new item at the top of the list and recomputes sort_order. */
+export function insertItemAtTop<T extends QuoteItemLike>(
+  items: T[],
+  newItem: Omit<T, 'sort_order'>
+): T[] {
+  return [{ ...newItem, sort_order: 0 } as T, ...items.map((it, i) => ({ ...it, sort_order: i + 1 }))];
+}
+
+/** Computes acceptance stats from a contractor's quotes (archived quotes excluded). */
+export function computeContractorStats(
+  quotes: Array<{ is_active?: boolean | null; client_response: string }>
+): { total: number; accepted: number; rate: number } {
+  const active = quotes.filter((q) => q.is_active !== false);
+  const total = active.length;
+  const accepted = active.filter((q) => q.client_response === 'accepted').length;
+  const rate = total > 0 ? Math.round((accepted / total) * 100) : 0;
+  return { total, accepted, rate };
 }

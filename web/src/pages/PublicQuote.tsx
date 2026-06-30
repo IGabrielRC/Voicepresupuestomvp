@@ -43,6 +43,16 @@ const RESPONSE_LABELS: Record<
   },
 };
 
+function validityText(expiresAt: string | null | undefined, expired: boolean): string {
+  if (!expiresAt) return '';
+  if (expired) return 'Vencido';
+  const d = new Date(expiresAt);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  if (isToday) return 'Vence hoy';
+  return `Vence el ${d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}`;
+}
+
 export default function PublicQuote({ slug }: { slug: string }) {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [items, setItems] = useState<QuoteItem[]>([]);
@@ -72,6 +82,8 @@ export default function PublicQuote({ slug }: { slug: string }) {
         setQuote(quote);
         setItems(items.sort((a, b) => a.sort_order - b.sort_order));
         setResponse(quote.client_response || 'pending');
+        // Fire-and-forget open receipt; never block the UI.
+        api.recordQuoteViewed(slug).catch(() => {});
         try {
           const { profile } = await api.getProfile(quote.contractor_id);
           setProfile(profile);
@@ -179,7 +191,7 @@ export default function PublicQuote({ slug }: { slug: string }) {
   const calculatedTotal = items.reduce((s, it) => s + (it.line_total || 0), 0);
   const effectiveTotal = quote.total_override != null ? quote.total_override : calculatedTotal;
   const totalStr = formatCurrency(effectiveTotal, quote.currency);
-  const expired = isExpired(quote.expires_at);
+  const expired = quote.is_expired ?? isExpired(quote.expires_at);
   const businessName = profile?.business_name || 'Tu empresa';
   const quoteNumber = quote.id.slice(0, 8).toUpperCase();
   const responseInfo = RESPONSE_LABELS[response];
@@ -218,6 +230,22 @@ export default function PublicQuote({ slug }: { slug: string }) {
           )}
         </div>
 
+        {/* Validity highlight card */}
+        <div
+          className={cn(
+            'mb-4 rounded-xl border p-4 flex items-center justify-between',
+            expired
+              ? 'bg-amber-50 border-amber-200 text-amber-800'
+              : 'bg-indigo-50 border-indigo-200 text-indigo-800'
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 flex-shrink-0" />
+            <span className="font-semibold">{validityText(quote.expires_at, expired)}</span>
+          </div>
+          <span className="text-sm opacity-80">{formatDate(quote.expires_at)}</span>
+        </div>
+
         {/* Main card */}
         <Card className="shadow-xl border-slate-200/60 overflow-hidden">
           {/* Header */}
@@ -241,10 +269,13 @@ export default function PublicQuote({ slug }: { slug: string }) {
                   </CardTitle>
                   <div className="text-sm text-slate-600 mt-1.5 space-y-0.5">
                     {profile?.contact_phone && (
-                      <p className="inline-flex items-center gap-1.5 mr-3">
+                      <a
+                        href={`tel:${profile.contact_phone.replace(/\s/g, '')}`}
+                        className="inline-flex items-center gap-1.5 mr-3 hover:text-indigo-600"
+                      >
                         <Phone className="w-3.5 h-3.5" />
                         {profile.contact_phone}
-                      </p>
+                      </a>
                     )}
                     {profile?.contact_email && (
                       <p className="inline-flex items-center gap-1.5">
@@ -471,6 +502,30 @@ export default function PublicQuote({ slug }: { slug: string }) {
             <p className="text-center text-xs text-slate-400 pt-1">
               Tu respuesta le llega al contratista por Telegram
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Expired state: info message instead of action buttons */}
+      {expired && response === 'pending' && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-amber-50/95 backdrop-blur-md border-t border-amber-200">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 py-5 sm:py-6 pb-[calc(1.25rem+env(safe-area-inset-bottom))] text-center space-y-3">
+            <div className="flex items-center justify-center gap-2 text-amber-800">
+              <Clock className="w-5 h-5" />
+              <p className="font-semibold">Este presupuesto venció el {formatDate(quote.expires_at)}</p>
+            </div>
+            <p className="text-sm text-amber-700">
+              Contactá al contratista para pedir una nueva versión.
+            </p>
+            {profile?.contact_phone && (
+              <a
+                href={`tel:${profile.contact_phone.replace(/\s/g, '')}`}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-100 text-amber-900 text-sm font-medium hover:bg-amber-200 transition-colors"
+              >
+                <Phone className="w-4 h-4" />
+                Llamar al contratista
+              </a>
+            )}
           </div>
         </div>
       )}

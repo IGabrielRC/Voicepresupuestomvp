@@ -8,12 +8,14 @@ export default function ShareModal({
   quoteId,
   token,
   mode,
+  onBeforeShare,
 }: {
   open: boolean;
   onClose: () => void;
   quoteId: string;
   token: string;
   mode?: 'reissue_changes' | 'reissue_rejected' | 'share_accepted';
+  onBeforeShare?: () => Promise<boolean>;
 }) {
   const [loading, setLoading] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
@@ -21,6 +23,10 @@ export default function ShareModal({
   const [copied, setCopied] = useState(false);
 
   async function load() {
+    if (onBeforeShare) {
+      const canProceed = await onBeforeShare();
+      if (!canProceed) return;
+    }
     setLoading(true);
     setError(null);
     try {

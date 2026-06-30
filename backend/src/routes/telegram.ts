@@ -120,7 +120,7 @@ async function handleTextCommand(chatId: number, telegramUserId: number, text: s
   const cmd = text.trim().toLowerCase();
 
   if (cmd === '/start') {
-    await showWelcome(chatId);
+    await showWelcome(chatId, telegramUserId);
     return;
   }
 
@@ -145,15 +145,51 @@ async function handleTextCommand(chatId: number, telegramUserId: number, text: s
   }
 
   // ANY other text: auto-welcome. Don't be a "command-only" bot.
-  await showWelcome(chatId);
+  await showWelcome(chatId, telegramUserId);
 }
 
-async function showWelcome(chatId: number) {
+async function showWelcome(chatId: number, telegramUserId?: number) {
+  let latestQuoteText = '';
+  if (telegramUserId) {
+    const { data: contractor } = await supabase
+      .from('contractors')
+      .select('id')
+      .eq('telegram_user_id', telegramUserId)
+      .single();
+    if (contractor) {
+      const { data: latest } = await supabase
+        .from('quotes')
+        .select('client_name, status, client_response, created_at')
+        .eq('contractor_id', contractor.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (latest) {
+        const statusLabels: Record<string, string> = {
+          draft: 'Borrador',
+          shared: 'Compartido',
+          expired: 'Expirado',
+        };
+        const responseLabels: Record<string, string> = {
+          pending: 'pendiente',
+          accepted: 'aceptado',
+          rejected: 'rechazado',
+          changes_requested: 'cambios pedidos',
+        };
+        const client = latest.client_name || 'Sin nombre';
+        const status = statusLabels[latest.status] || latest.status;
+        const response = responseLabels[latest.client_response] || latest.client_response;
+        latestQuoteText = `\n\n📋 Último presupuesto: <b>${escapeHtml(client)}</b> — ${status} · ${response}`;
+      }
+    }
+  }
+
   await sendMessage(
     chatId,
     `👋 <b>¡Hola! Soy VoiceQuote.</b>\n\n` +
       `<b>Mandame una nota de voz</b> contándome qué presupuesto querés hacer, y yo te armo el presupuesto editable + el link para mandarle a tu cliente.\n\n` +
-      `Tip: hablá natural. Si mencionás varias tareas, las separo en items automáticamente. Los precios los completás vos después en el editor.`,
+      `Tip: hablá natural. Si mencionás varias tareas, las separo en items automáticamente. Los precios los completás vos después en el editor.` +
+      latestQuoteText,
     {
       inline_keyboard: [
         [{ text: '📋 Ver mis presupuestos', callback_data: 'list_quotes' }],

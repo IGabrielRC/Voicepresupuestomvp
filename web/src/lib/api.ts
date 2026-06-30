@@ -97,6 +97,12 @@ export const api = {
   getProfile: (contractorId: string) =>
     jsonFetch<{ profile: ContractorProfile | null }>(`/api/contractors/${contractorId}/profile`),
 
+  getContractorStats: (contractorId: string) =>
+    jsonFetch<{ total: number; accepted: number; rate: number }>(`/api/contractors/${contractorId}/stats`),
+
+  recordQuoteViewed: (slug: string) =>
+    jsonFetch<{ ok: boolean }>(`/api/quotes/slug/${slug}/viewed`, { method: 'POST' }),
+
   patchProfile: (contractorId: string, body: Partial<ContractorProfile>, token?: string) =>
     jsonFetch<{ profile: ContractorProfile }>(`/api/contractors/${contractorId}/profile`, {
       method: 'PATCH',

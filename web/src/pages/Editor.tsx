@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus,
   Trash2,
@@ -72,9 +72,21 @@ export default function Editor({ quoteId }: { quoteId: string }) {
   const [overrideError, setOverrideError] = useState<string | null>(null);
   const [editToken, setEditToken] = useState<string | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
+  const [stats, setStats] = useState<{ total: number; accepted: number; rate: number } | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<number | null>(null);
+  const [animatingTempId, setAnimatingTempId] = useState<string | null>(null);
+  const [swipingItem, setSwipingItem] = useState<number | null>(null);
+  const [swipeDelta, setSwipeDelta] = useState(0);
   const lastSavedRef = useRef<string>('');
   const lastManualSaveAt = useRef<number>(0);
+  const itemRefs = useRef<Map<number, HTMLInputElement>>(new Map());
+  const touchStartX = useRef<Map<number, number>>(new Map());
   const locked = quote?.client_response === 'accepted' || quote?.is_active === false;
+
+  const isDirty = useMemo(() => {
+    if (!quote) return false;
+    return lastSavedRef.current !== JSON.stringify({ q: quote, i: items });
+  }, [quote, items]);
 
   useEffect(() => {
     setOverrideInput(quote?.total_override != null ? String(quote.total_override) : '');
@@ -105,6 +117,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
           } catch {
             /* ignore storage errors */
           }
+          api.getContractorStats(quote.contractor_id).then(setStats).catch(() => {});
         }
         setLoading(false);
       })
@@ -118,8 +131,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
   // active saves, and a short cooldown after a manual save (to avoid 429s).
   useEffect(() => {
     if (loading || !quote || locked || saving) return;
-    const currentJson = JSON.stringify({ q: quote, i: items });
-    if (currentJson === lastSavedRef.current) return;
+    if (!isDirty) return;
     const sinceManualSave = Date.now() - lastManualSaveAt.current;
     if (sinceManualSave < 2500) return;
     const timer = setTimeout(() => {
@@ -127,10 +139,11 @@ export default function Editor({ quoteId }: { quoteId: string }) {
     }, 5000);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quote, items, loading, locked, saving]);
+  }, [quote, items, loading, locked, saving, isDirty]);
 
-  async function save(isAuto = false) {
-    if (!quote || locked || !editToken) return;
+  async function save(isAuto = false): Promise<boolean> {
+    if (!quote || locked || !editToken) return false;
+    if (!isAuto && !isDirty) return true;
     setSaving(true);
     if (!isAuto) {
       setSaved(false);
@@ -161,6 +174,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
         setSaved(true);
         setTimeout(() => setSaved(false), 2500);
       }
+      return true;
     } catch (e: any) {
       const raw = e?.message || '';
       const is429 =
@@ -173,22 +187,61 @@ export default function Editor({ quoteId }: { quoteId: string }) {
       window.setTimeout(() => {
         setSaveError((current) => (current === message ? null : current));
       }, 5000);
+      return false;
     } finally {
       setSaving(false);
     }
   }
 
+  async function handleShareClick() {
+    if (isDirty) {
+      const ok = await save(false);
+      if (!ok) return;
+    }
+    setShareOpen(true);
+  }
+
+  async function handleBeforeShare(): Promise<boolean> {
+    if (isDirty) {
+      return await save(false);
+    }
+    return true;
+  }
+
   function addItem() {
     if (locked) return;
-    setItems([
-      ...items,
-      { description: '', qty: 1, unit_price: 0, line_total: 0, sort_order: items.length },
-    ]);
+    const tempId = `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const newItem: QuoteItem = {
+      description: '',
+      qty: 1,
+      unit_price: null,
+      line_total: 0,
+      sort_order: 0,
+      tempId,
+    };
+    setItems([newItem, ...items.map((it, i) => ({ ...it, sort_order: i + 1 }))]);
+    setAnimatingTempId(tempId);
+    window.setTimeout(() => {
+      const el = itemRefs.current.get(0);
+      if (el) {
+        el.focus();
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+      window.setTimeout(() => setAnimatingTempId(null), 250);
+    }, 50);
   }
+
+  function confirmRemoveItem() {
+    if (itemToDelete === null) return;
+    removeItem(itemToDelete);
+    setItemToDelete(null);
+  }
+
   function removeItem(i: number) {
     if (locked) return;
     setItems(items.filter((_, idx) => idx !== i));
   }
+
   function moveItem(i: number, dir: -1 | 1) {
     if (locked) return;
     const j = i + dir;
@@ -197,9 +250,35 @@ export default function Editor({ quoteId }: { quoteId: string }) {
     [copy[i], copy[j]] = [copy[j], copy[i]];
     setItems(copy);
   }
+
   function updateItem(i: number, patch: Partial<QuoteItem>) {
     if (locked) return;
     setItems(items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  }
+
+  function onTouchStart(i: number, e: React.TouchEvent) {
+    if (locked) return;
+    touchStartX.current.set(i, e.touches[0].clientX);
+    setSwipingItem(i);
+    setSwipeDelta(0);
+  }
+
+  function onTouchMove(i: number, e: React.TouchEvent) {
+    if (swipingItem !== i) return;
+    const startX = touchStartX.current.get(i) ?? 0;
+    setSwipeDelta(e.touches[0].clientX - startX);
+  }
+
+  function onTouchEnd(i: number) {
+    if (swipingItem !== i) return;
+    if (swipeDelta < -60) {
+      setItemToDelete(i);
+    } else if (swipeDelta > 60) {
+      moveItem(i, 1);
+    }
+    setSwipingItem(null);
+    setSwipeDelta(0);
+    touchStartX.current.delete(i);
   }
 
   function updateOverride(value: string) {
@@ -279,13 +358,9 @@ export default function Editor({ quoteId }: { quoteId: string }) {
               El presupuesto y todos sus datos fueron borrados.
             </p>
             <div className="mt-6 flex flex-col sm:flex-row gap-2 justify-center">
-              <Button variant="outline" onClick={() => (window.location.href = '/')}>
-                Volver al inicio
-              </Button>
+              <Button variant="outline" onClick={() => (window.location.href = '/')}>Volver al inicio</Button>
               <Button
-                onClick={() =>
-                  window.open('https://t.me/presupuestomvp_bot', '_blank')
-                }
+                onClick={() => window.open('https://t.me/presupuestomvp_bot', '_blank')}
                 className="bg-sky-500 hover:bg-sky-600 text-white"
               >
                 <Send className="w-4 h-4 mr-2" />
@@ -293,8 +368,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
               </Button>
             </div>
             <p className="mt-5 text-xs text-slate-400">
-              Tu bot está en <span className="font-mono">@presupuestomvp_bot</span>. Mandale
-              una nota de voz con el nuevo presupuesto.
+              Tu bot está en <span className="font-mono">@presupuestomvp_bot</span>. Mandale una nota de voz con el nuevo presupuesto.
             </p>
           </CardContent>
         </Card>
@@ -325,6 +399,13 @@ export default function Editor({ quoteId }: { quoteId: string }) {
   const inputBase =
     'w-full px-3 py-2 rounded-lg border border-slate-200/60 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-colors disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed';
 
+  const shareLabelBase =
+    quote.client_response === 'rejected'
+      ? 'Volver a compartir'
+      : quote.client_response === 'changes_requested'
+        ? 'Compartir nueva versión'
+        : 'Compartir';
+
   return (
     <div className="min-h-screen pb-24">
       <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-slate-200/60">
@@ -334,19 +415,17 @@ export default function Editor({ quoteId }: { quoteId: string }) {
           </a>
           <div className="flex items-center gap-2">
             <Button
-              onClick={() => setShareOpen(true)}
+              onClick={handleShareClick}
               variant="outline"
               size="sm"
-              className="gap-1.5"
+              className="relative gap-1.5"
             >
               <Share2 className="w-4 h-4" />
-              <span className="hidden sm:inline">
-                {quote.client_response === 'rejected'
-                  ? 'Volver a compartir'
-                  : quote.client_response === 'changes_requested'
-                    ? 'Compartir nueva versión'
-                    : 'Compartir'}
-              </span>
+              <span className="hidden sm:inline">{isDirty ? 'Guardar y compartir' : shareLabelBase}</span>
+              <span className="sm:hidden">{isDirty ? 'Guardar y compartir' : 'Compartir'}</span>
+              {isDirty && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white" />
+              )}
             </Button>
             <div className="relative">
               <button
@@ -358,10 +437,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
               </button>
               {menuOpen && (
                 <>
-                  <div
-                    className="fixed inset-0 z-10"
-                    onClick={() => setMenuOpen(false)}
-                  />
+                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
                   <div className="absolute right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-20 py-1">
                     <button
                       onClick={() => {
@@ -380,8 +456,9 @@ export default function Editor({ quoteId }: { quoteId: string }) {
             {!locked && (
               <div className="flex items-center gap-2">
                 {autoSavedAt && !saving && !saved && (
-                  <span className="hidden sm:inline text-xs text-slate-400">
-                    Autoguardado · {autoSavedAt.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                  <span className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full">
+                    <Check className="w-3.5 h-3.5" />
+                    Guardado {autoSavedAt.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 )}
                 <Button
@@ -446,15 +523,22 @@ export default function Editor({ quoteId }: { quoteId: string }) {
           </div>
         )}
 
-        <input
-          id="client-name"
-          type="text"
-          value={quote.client_name || ''}
-          onChange={(e) => setQuote({ ...quote, client_name: e.target.value })}
-          placeholder="Nombre del cliente"
-          disabled={locked}
-          className="w-full text-3xl sm:text-4xl font-semibold tracking-[-0.03em] bg-transparent border-none focus:outline-none focus:ring-0 placeholder:text-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
-        />
+        <div>
+          <input
+            id="client-name"
+            type="text"
+            value={quote.client_name || ''}
+            onChange={(e) => setQuote({ ...quote, client_name: e.target.value })}
+            placeholder="Nombre del cliente"
+            disabled={locked}
+            className="w-full text-3xl sm:text-4xl font-semibold tracking-[-0.03em] bg-transparent border-none focus:outline-none focus:ring-0 placeholder:text-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
+          />
+          {stats && stats.total > 0 && (
+            <p className="mt-1.5 text-sm text-slate-500">
+              {stats.total} enviados · {stats.rate}% aceptados
+            </p>
+          )}
+        </div>
 
         <section className="bg-white rounded-xl border border-slate-200 p-5">
           <h2 className="text-sm font-semibold text-slate-900 mb-4">Cliente</h2>
@@ -492,68 +576,105 @@ export default function Editor({ quoteId }: { quoteId: string }) {
             </p>
           ) : (
             <div className="space-y-2">
-              {items.map((it, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2 items-start">
-                  <input
-                    type="text"
-                    value={it.description}
-                    onChange={(e) => updateItem(i, { description: e.target.value })}
-                    placeholder="Descripción"
-                    disabled={locked}
-                    className="col-span-12 sm:col-span-6 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
-                  />
-                  <input
-                    type="number"
-                    value={it.qty ?? ''}
-                    onChange={(e) => {
-                      const qty = e.target.value === '' ? null : Number(e.target.value);
-                      const line_total = qty && it.unit_price ? qty * it.unit_price : 0;
-                      updateItem(i, { qty, line_total });
-                    }}
-                    placeholder="Cant."
-                    disabled={locked}
-                    className="col-span-3 sm:col-span-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
-                  />
-                  <input
-                    type="number"
-                    value={it.unit_price ?? ''}
-                    onChange={(e) => {
-                      const unit_price = e.target.value === '' ? null : Number(e.target.value);
-                      const line_total = it.qty && unit_price ? it.qty * unit_price : 0;
-                      updateItem(i, { unit_price, line_total });
-                    }}
-                    placeholder="Precio"
-                    disabled={locked}
-                    className="col-span-4 sm:col-span-2 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
-                  />
-                  <div className="col-span-3 sm:col-span-2 px-3 py-2 text-sm text-slate-600 flex items-center">
-                    {formatCurrency(it.line_total || 0, quote.currency)}
+              {items.map((it, i) => {
+                const isSwiping = swipingItem === i;
+                const revealDelete = isSwiping && swipeDelta < 0;
+                const revealReorder = isSwiping && swipeDelta > 0;
+                return (
+                  <div
+                    key={it.tempId || i}
+                    className={`relative overflow-hidden rounded-lg ${it.tempId && it.tempId === animatingTempId ? 'animate-item-enter' : ''}`}
+                  >
+                    {/* Swipe affordance: delete on left swipe */}
+                    <div
+                      className="absolute inset-y-0 left-0 right-0 bg-red-50 flex items-center justify-end px-4 transition-opacity"
+                      style={{ opacity: revealDelete ? Math.min(Math.abs(swipeDelta) / 60, 1) : 0 }}
+                    >
+                      <Trash2 className="w-5 h-5 text-red-500" />
+                    </div>
+                    {/* Swipe affordance: reorder on right swipe */}
+                    <div
+                      className="absolute inset-y-0 left-0 right-0 bg-indigo-50 flex items-center justify-start px-4 transition-opacity"
+                      style={{ opacity: revealReorder ? Math.min(Math.abs(swipeDelta) / 60, 1) : 0 }}
+                    >
+                      <ArrowDown className="w-5 h-5 text-indigo-500" />
+                    </div>
+
+                    <div
+                      className="grid grid-cols-12 gap-2 items-start relative bg-white transition-transform"
+                      style={{ transform: isSwiping ? `translateX(${swipeDelta}px)` : undefined }}
+                      onTouchStart={(e) => onTouchStart(i, e)}
+                      onTouchMove={(e) => onTouchMove(i, e)}
+                      onTouchEnd={() => onTouchEnd(i)}
+                    >
+                      <input
+                        type="text"
+                        ref={(el) => {
+                          if (el) itemRefs.current.set(i, el);
+                        }}
+                        value={it.description}
+                        onChange={(e) => updateItem(i, { description: e.target.value })}
+                        placeholder="Descripción"
+                        disabled={locked}
+                        className="col-span-12 sm:col-span-6 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
+                      />
+                      <input
+                        type="number"
+                        value={it.qty ?? ''}
+                        onChange={(e) => {
+                          const qty = e.target.value === '' ? null : Number(e.target.value);
+                          const line_total = qty && it.unit_price ? qty * it.unit_price : 0;
+                          updateItem(i, { qty, line_total });
+                        }}
+                        placeholder="Cant."
+                        disabled={locked}
+                        className="col-span-3 sm:col-span-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
+                      />
+                      <input
+                        type="number"
+                        value={it.unit_price ?? ''}
+                        onChange={(e) => {
+                          const unit_price = e.target.value === '' ? null : Number(e.target.value);
+                          const line_total = it.qty && unit_price ? it.qty * unit_price : 0;
+                          updateItem(i, { unit_price, line_total });
+                        }}
+                        placeholder="Precio"
+                        disabled={locked}
+                        className="col-span-4 sm:col-span-2 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
+                      />
+                      <div className="col-span-3 sm:col-span-2 px-3 py-2 text-sm text-slate-600 flex items-center">
+                        {formatCurrency(it.line_total || 0, quote.currency)}
+                      </div>
+                      <div className="col-span-12 sm:col-span-1 flex items-center gap-1 justify-end">
+                        <button
+                          onClick={() => moveItem(i, -1)}
+                          disabled={locked || i === 0}
+                          className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                          aria-label="Subir"
+                        >
+                          <ArrowUp className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => moveItem(i, 1)}
+                          disabled={locked || i === items.length - 1}
+                          className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                          aria-label="Bajar"
+                        >
+                          <ArrowDown className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setItemToDelete(i)}
+                          disabled={locked}
+                          className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                          aria-label="Eliminar"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="col-span-12 sm:col-span-1 flex items-center gap-1 justify-end">
-                    <button
-                      onClick={() => moveItem(i, -1)}
-                      disabled={locked || i === 0}
-                      className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <ArrowUp className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => moveItem(i, 1)}
-                      disabled={locked || i === items.length - 1}
-                      className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <ArrowDown className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => removeItem(i)}
-                      disabled={locked}
-                      className="p-1 text-slate-400 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -708,9 +829,10 @@ export default function Editor({ quoteId }: { quoteId: string }) {
               ? 'reissue_changes'
               : 'share_accepted'
         }
+        onBeforeShare={handleBeforeShare}
       />
 
-      {/* Delete confirmation modal */}
+      {/* Delete quote confirmation modal */}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -735,6 +857,31 @@ export default function Editor({ quoteId }: { quoteId: string }) {
               ) : (
                 <Trash2 className="w-4 h-4 mr-2" />
               )}
+              Sí, eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete item confirmation modal */}
+      <AlertDialog open={itemToDelete !== null} onOpenChange={(open) => !open && setItemToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="mx-auto w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-2">
+              <Trash2 className="w-6 h-6 text-red-600" />
+            </div>
+            <AlertDialogTitle className="text-center">¿Eliminar este ítem?</AlertDialogTitle>
+            <AlertDialogDescription className="text-center">
+              Se quitará del presupuesto. Podés deshacer cerrando sin guardar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmRemoveItem}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
               Sí, eliminar
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -5,6 +5,9 @@ import {
   buildInactiveSlugMessage,
   buildCloneRow,
   buildCloneItems,
+  isQuoteDirty,
+  insertItemAtTop,
+  computeContractorStats,
   type QuoteLike,
 } from './quotes.js';
 
@@ -87,4 +90,45 @@ test('buildCloneItems copies items with a new quote id', () => {
   assert.equal(items[0].line_total, 200);
   assert.equal(items[1].quote_id, 'quote-2');
   assert.equal(items[1].sort_order, 1);
+});
+
+test('isQuoteDirty returns false when snapshot matches current state', () => {
+  const quote = { client_name: 'Juan', currency: 'USD' };
+  const items = [{ description: 'Item', qty: 1, unit_price: 10, line_total: 10, sort_order: 0 }];
+  const snapshot = JSON.stringify({ q: quote, i: items });
+  assert.equal(isQuoteDirty(snapshot, quote, items), false);
+});
+
+test('isQuoteDirty returns true when state changed', () => {
+  const quote = { client_name: 'Juan', currency: 'USD' };
+  const items = [{ description: 'Item', qty: 1, unit_price: 10, line_total: 10, sort_order: 0 }];
+  const snapshot = JSON.stringify({ q: quote, i: items });
+  const changed = [...items, { description: 'New', qty: 1, unit_price: 5, line_total: 5, sort_order: 1 }];
+  assert.equal(isQuoteDirty(snapshot, quote, changed), true);
+});
+
+test('insertItemAtTop places new item at index 0', () => {
+  const items: Array<{ description: string; qty: number; unit_price: number | null; line_total: number; sort_order: number }> = [
+    { description: 'Old', qty: 1, unit_price: 10, line_total: 10, sort_order: 0 },
+  ];
+  const next = insertItemAtTop(items, { description: 'New', qty: 1, unit_price: null, line_total: 0 });
+
+  assert.equal(next.length, 2);
+  assert.equal(next[0].description, 'New');
+  assert.equal(next[0].sort_order, 0);
+  assert.equal(next[1].description, 'Old');
+  assert.equal(next[1].sort_order, 1);
+});
+
+test('computeContractorStats excludes archived quotes and computes rate', () => {
+  const quotes = [
+    { is_active: true, client_response: 'accepted' },
+    { is_active: true, client_response: 'pending' },
+    { is_active: false, client_response: 'accepted' },
+    { is_active: true, client_response: 'rejected' },
+  ];
+  const stats = computeContractorStats(quotes);
+  assert.equal(stats.total, 3);
+  assert.equal(stats.accepted, 1);
+  assert.equal(stats.rate, 33);
 });

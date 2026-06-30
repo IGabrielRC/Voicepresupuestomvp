@@ -11,7 +11,7 @@ import {
   buildCloneItems,
   type ShareMode,
 } from '../services/quotes.js';
-import { checkPatchRateLimit } from '../middleware/rateLimit.js';
+import { checkPatchRateLimit, checkViewRateLimit } from '../middleware/rateLimit.js';
 import { validatePatchQuoteBody } from '../middleware/validate.js';
 
 const MAX_SLUG_ATTEMPTS = 3;
@@ -256,7 +256,8 @@ quotesRouter.get('/quotes/slug/:slug', async (req: Request, res: Response) => {
       .eq('slug', slug)
       .single();
     if (error || !data) return res.status(404).json({ error: 'not_found' });
-    return res.json({ quote: data, items: data.quote_items });
+    const is_expired = data.expires_at ? new Date(data.expires_at).getTime() < Date.now() : false;
+    return res.json({ quote: { ...data, is_expired }, items: data.quote_items });
   }
 
   if (!slugRow.is_active) {
@@ -277,7 +278,83 @@ quotesRouter.get('/quotes/slug/:slug', async (req: Request, res: Response) => {
     .eq('id', slugRow.quote_id)
     .single();
   if (error || !data) return res.status(404).json({ error: 'not_found' });
-  res.json({ quote: data, items: data.quote_items });
+  const is_expired = data.expires_at ? new Date(data.expires_at).getTime() < Date.now() : false;
+  res.json({ quote: { ...data, is_expired }, items: data.quote_items });
+});
+
+// Public "view receipt": records that someone opened the public quote and notifies the contractor.
+// Rate-limited to 1 call per minute per IP+slug so Telegram isn't spammed on refreshes.
+quotesRouter.post('/quotes/slug/:slug/viewed', async (req: Request, res: Response) => {
+  const slug = req.params.slug;
+  const ip = (req.ip || req.socket.remoteAddress || 'unknown').toString();
+
+  if (!checkViewRateLimit(ip, slug)) {
+    return res.status(429).json({ error: 'too_many_requests' });
+  }
+
+  // Resolve slug to quote (prefer slug history, fallback to legacy slug on quotes table).
+  const { data: slugRow, error: sErr } = await supabase
+    .from('quote_slugs')
+    .select('quote_id, is_active, replaced_by_slug')
+    .eq('slug', slug)
+    .single();
+
+  let quoteId: string | null = null;
+  if (sErr || !slugRow) {
+    const { data: legacy } = await supabase
+      .from('quotes')
+      .select('id, is_active')
+      .eq('slug', slug)
+      .single();
+    if (!legacy) return res.status(404).json({ error: 'not_found' });
+    if (legacy.is_active === false) {
+      const body = await buildInactiveResponse(legacy.id);
+      return res.status(410).json(body);
+    }
+    quoteId = legacy.id;
+  } else {
+    if (!slugRow.is_active) {
+      const body = await buildInactiveResponse(slugRow.quote_id);
+      return res.status(410).json(body);
+    }
+    quoteId = slugRow.quote_id;
+  }
+
+  const { data: quote, error: qErr } = await supabase
+    .from('quotes')
+    .select('id, contractor_id, client_name, edit_token, view_count, contractors(telegram_user_id)')
+    .eq('id', quoteId)
+    .single();
+  if (qErr || !quote) return res.status(404).json({ error: 'not_found' });
+
+  // Update view timestamp + counter atomically. Use an SQL increment so concurrent
+  // viewers do not lose updates.
+  const now = new Date().toISOString();
+  const previousCount = (quote as any).view_count || 0;
+  await supabase.rpc('increment_quote_view', { quote_id: quote.id, now });
+
+  // Notify contractor only on the first view of this quote (view_count went 0 -> 1).
+  // Self-notification suppression: the public link has no edit token, so we treat
+  // the contractor the same as a client and only fire on the very first open.
+  const isFirstView = previousCount === 0;
+  const telegramUserId = (quote as any).contractors?.telegram_user_id;
+  if (isFirstView && telegramUserId) {
+    const clientName = quote.client_name || 'tu cliente';
+    const editUrl = `${env.WEB_BASE_URL}/q/${quote.id}?t=${(quote as any).edit_token}`;
+    try {
+      await sendMessage(
+        telegramUserId,
+        `👀 <b>${escapeHtml(clientName)} abrió el presupuesto.</b>`,
+        {
+          inline_keyboard: [[{ text: '📝 Ver presupuesto', url: editUrl }]],
+        }
+      );
+    } catch (e) {
+      console.error('[viewed] telegram notify failed', e);
+    }
+  }
+
+  res.json({ ok: true });
 });
 
 quotesRouter.post('/quotes/:id/share', async (req: Request, res: Response) => {

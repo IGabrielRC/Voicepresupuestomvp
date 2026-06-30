@@ -7,6 +7,9 @@ const AUDIO_COOLDOWN_MS = 5_000; // 5 seconds between audio notes per Telegram u
 const lastPatchByIp = new Map<string, number>();
 const PATCH_COOLDOWN_MS = 1_000; // 1 second between PATCH calls per IP
 
+const lastViewByIpSlug = new Map<string, number>();
+const VIEW_COOLDOWN_MS = 60_000; // 1 minute between public view receipts per IP+slug
+
 export function checkAudioRateLimit(telegramUserId: number): boolean {
   const now = Date.now();
   const last = lastAudioByUser.get(telegramUserId);
@@ -33,6 +36,22 @@ export function checkPatchRateLimit(ip: string): boolean {
   if (lastPatchByIp.size > 10_000) {
     for (const [k, v] of lastPatchByIp) {
       if (now - v > PATCH_COOLDOWN_MS * 10) lastPatchByIp.delete(k);
+    }
+  }
+  return true;
+}
+
+export function checkViewRateLimit(ip: string, slug: string): boolean {
+  const now = Date.now();
+  const key = `${ip}:${slug}`;
+  const last = lastViewByIpSlug.get(key);
+  if (last && now - last < VIEW_COOLDOWN_MS) {
+    return false;
+  }
+  lastViewByIpSlug.set(key, now);
+  if (lastViewByIpSlug.size > 10_000) {
+    for (const [k, v] of lastViewByIpSlug) {
+      if (now - v > VIEW_COOLDOWN_MS * 10) lastViewByIpSlug.delete(k);
     }
   }
   return true;

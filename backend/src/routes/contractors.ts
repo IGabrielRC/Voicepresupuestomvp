@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase.js';
+import { computeContractorStats } from '../services/quotes.js';
 
 export const contractorsRouter = Router();
 
@@ -104,6 +105,17 @@ contractorsRouter.get('/contractors/:id/profile', async (req: Request, res: Resp
     .maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
   res.json({ profile: data });
+});
+
+// Public stats for a contractor (used by the editor acceptance-rate indicator).
+// Counts only non-archived quotes.
+contractorsRouter.get('/contractors/:id/stats', async (req: Request, res: Response) => {
+  const { data: quotes, error } = await supabase
+    .from('quotes')
+    .select('client_response, is_active')
+    .eq('contractor_id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(computeContractorStats(quotes || []));
 });
 
 contractorsRouter.patch('/contractors/:id/profile', async (req: Request, res: Response) => {
