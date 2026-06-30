@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { env } from '../lib/env.js';
 import { supabase } from '../lib/supabase.js';
+import { trackEvent } from '../lib/analytics.js';
 import { sendMessage } from '../services/telegram.js';
 import { newSlug } from '../services/slug.js';
 import { newEditToken } from '../services/token.js';
@@ -337,6 +338,15 @@ quotesRouter.post('/quotes/slug/:slug/viewed', async (req: Request, res: Respons
   // Self-notification suppression: the public link has no edit token, so we treat
   // the contractor the same as a client and only fire on the very first open.
   const isFirstView = previousCount === 0;
+
+  trackEvent({
+    event_type: 'quote_viewed',
+    contractor_id: quote.contractor_id,
+    quote_id: quote.id,
+    slug,
+    metadata: { first_view: isFirstView },
+  });
+
   const telegramUserId = (quote as any).contractors?.telegram_user_id;
   if (isFirstView && telegramUserId) {
     const clientName = quote.client_name || 'tu cliente';
@@ -392,6 +402,14 @@ quotesRouter.post('/quotes/:id/share', async (req: Request, res: Response) => {
 
     await ensureSlugActive(quote.id, data.slug);
 
+    trackEvent({
+      event_type: 'quote_shared',
+      contractor_id: quote.contractor_id,
+      quote_id: quote.id,
+      slug: data.slug,
+      metadata: { mode },
+    });
+
     const public_url = `${publicBase}/${data.slug}`;
     return res.json({ public_url, slug: data.slug, id: data.id });
   }
@@ -422,6 +440,21 @@ quotesRouter.post('/quotes/:id/share', async (req: Request, res: Response) => {
       .update({ slug: nextSlug, status: 'shared', client_response: 'pending' })
       .eq('id', quote.id);
     if (uErr) return res.status(500).json({ error: uErr.message });
+
+    trackEvent({
+      event_type: 'quote_shared',
+      contractor_id: quote.contractor_id,
+      quote_id: quote.id,
+      slug: nextSlug,
+      metadata: { mode },
+    });
+    trackEvent({
+      event_type: 'quote_reissued',
+      contractor_id: quote.contractor_id,
+      quote_id: quote.id,
+      slug: nextSlug,
+      metadata: { mode, old_slug: quote.slug, new_slug: nextSlug },
+    });
 
     const public_url = `${publicBase}/${nextSlug}`;
     return res.json({ public_url, slug: nextSlug, id: quote.id });
@@ -486,6 +519,21 @@ quotesRouter.post('/quotes/:id/share', async (req: Request, res: Response) => {
     .eq('id', quote.id);
 
   await deactivateSlug(quote.id, quote.slug, reservedSlug, now);
+
+  trackEvent({
+    event_type: 'quote_shared',
+    contractor_id: quote.contractor_id,
+    quote_id: newQuote.id,
+    slug: reservedSlug,
+    metadata: { mode },
+  });
+  trackEvent({
+    event_type: 'quote_reissued',
+    contractor_id: quote.contractor_id,
+    quote_id: newQuote.id,
+    slug: reservedSlug,
+    metadata: { mode, old_slug: quote.slug, new_slug: reservedSlug },
+  });
 
   const public_url = `${publicBase}/${reservedSlug}`;
   return res.json({ public_url, slug: reservedSlug, id: newQuote.id });
@@ -559,6 +607,14 @@ quotesRouter.post('/quotes/slug/:slug/respond', async (req: Request, res: Respon
     .update({ client_response: response })
     .eq('id', quote.id);
   if (uErr) return res.status(500).json({ error: uErr.message });
+
+  trackEvent({
+    event_type: 'quote_responded',
+    contractor_id: quote.contractor_id,
+    quote_id: quote.id,
+    slug,
+    metadata: { response },
+  });
 
   // Notify contractor via Telegram (best-effort, don't fail the request if it fails).
   const telegramUserId = (quote as any).contractors?.telegram_user_id;

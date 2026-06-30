@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { supabase } from '../lib/supabase.js';
+import { trackEvent } from '../lib/analytics.js';
 import { newSlug } from '../services/slug.js';
 import { newEditToken } from '../services/token.js';
 
@@ -83,6 +84,14 @@ testRouter.post('/test/simulate-voice', async (req, res) => {
     created_at: new Date().toISOString(),
   });
   if (slugErr) console.error('[test] quote_slugs insert failed', slugErr);
+
+  trackEvent({
+    event_type: 'quote_created',
+    contractor_id: contractorId,
+    quote_id: quote.id,
+    slug,
+    metadata: { source: 'demo_route', items_count: fakeItems.length },
+  });
 
   res.json({
     quote_id: quote.id,

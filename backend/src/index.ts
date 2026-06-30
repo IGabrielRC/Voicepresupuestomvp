@@ -6,6 +6,7 @@ import { env } from './lib/env.js';
 import { telegramRouter } from './routes/telegram.js';
 import { quotesRouter } from './routes/quotes.js';
 import { contractorsRouter } from './routes/contractors.js';
+import { adminRouter } from './routes/admin.js';
 import { testRouter } from './routes/test.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -20,6 +21,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
 app.use('/api', telegramRouter);
 app.use('/api', quotesRouter);
 app.use('/api', contractorsRouter);
+app.use('/api', adminRouter);
 app.use('/api', testRouter);
 
 // 404 for unknown /api/*

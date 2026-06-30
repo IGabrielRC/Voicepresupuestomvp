@@ -4,11 +4,18 @@ const API = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}`;
 
 export type InlineButton = { text: string; url?: string; callback_data?: string };
 export type InlineKeyboard = { inline_keyboard: InlineButton[][] };
+export type ReplyKeyboardButton = { text: string };
+export type ReplyKeyboardMarkup = {
+  keyboard: ReplyKeyboardButton[][];
+  resize_keyboard: true;
+  one_time_keyboard?: boolean;
+};
+export type ReplyMarkup = InlineKeyboard | ReplyKeyboardMarkup;
 
 export async function sendMessage(
   chatId: number,
   text: string,
-  replyMarkup?: InlineKeyboard
+  replyMarkup?: ReplyMarkup
 ): Promise<{ message_id: number } | null> {
   const body: Record<string, unknown> = {
     chat_id: chatId,

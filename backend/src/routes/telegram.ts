@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { env } from '../lib/env.js';
 import { supabase } from '../lib/supabase.js';
+import { trackEvent } from '../lib/analytics.js';
 import { audioToQuote, type QuoteJson } from '../services/gemini.js';
 import {
   getFile,
@@ -10,6 +11,7 @@ import {
   deleteMessage,
   answerCallbackQuery,
   type InlineButton,
+  type ReplyKeyboardMarkup,
 } from '../services/telegram.js';
 import { newSlug } from '../services/slug.js';
 import { newEditToken } from '../services/token.js';
@@ -18,6 +20,23 @@ import { checkAudioRateLimit } from '../middleware/rateLimit.js';
 export const telegramRouter = Router();
 
 const WEB_URL = env.WEB_BASE_URL;
+
+// Mobile-first persistent reply keyboard. Tapping a button acts like a command.
+const MAIN_MENU_KEYBOARD: ReplyKeyboardMarkup = {
+  keyboard: [
+    [{ text: '📋 Mis presupuestos' }, { text: '📊 Stats' }],
+    [{ text: '👤 Mi perfil' }, { text: '❓ Ayuda' }],
+  ],
+  resize_keyboard: true,
+};
+
+const CREATE_BUTTON_KEYBOARD: ReplyKeyboardMarkup = {
+  keyboard: [
+    [{ text: '➕ Crear presupuesto' }, { text: '🎙️ Grabar nota de voz' }],
+    [{ text: '📋 Mis presupuestos' }, { text: '❓ Ayuda' }],
+  ],
+  resize_keyboard: true,
+};
 
 telegramRouter.post('/webhooks/telegram', async (req: Request, res: Response) => {
   // Acknowledge Telegram immediately to avoid retry storms. Handle async.
@@ -92,17 +111,7 @@ async function handleCallbackQuery(callbackQuery: any) {
   }
 
   if (data === 'help') {
-    await sendMessage(
-      chatId,
-      `<b>Cómo usar VoiceQuote</b>\n\n` +
-        `1. Mandame una <b>nota de voz</b> con los items del presupuesto.\n` +
-        `2. Yo te paso un link para revisar y editar.\n` +
-        `3. Cuando esté bien, hacé click en "Compartir" dentro del editor.\n` +
-        `4. El link público lo mandás a tu cliente por WhatsApp.\n` +
-        `5. Tu cliente acepta, rechaza o pide cambios con un click. Te aviso a vos.\n\n` +
-        `<b>Comandos:</b>\n/start — bienvenida\n/quotes — tus últimos presupuestos\n/help — este mensaje`,
-      { inline_keyboard: [[{ text: '🌐 Abrir la app', url: `${WEB_URL}/` }]] }
-    ).catch(() => {});
+    await sendHelp(chatId);
     return;
   }
 
@@ -110,7 +119,8 @@ async function handleCallbackQuery(callbackQuery: any) {
     await sendMessage(
       chatId,
       `Mandame una <b>nota de voz</b> contando el presupuesto. ` +
-        `Te paso el link al editor en unos segundos. 🎙️`
+        `Te paso el link al editor en unos segundos. 🎙️`,
+      CREATE_BUTTON_KEYBOARD
     ).catch(() => {});
     return;
   }
@@ -124,23 +134,32 @@ async function handleTextCommand(chatId: number, telegramUserId: number, text: s
     return;
   }
 
-  if (cmd === '/quotes') {
+  if (cmd === '➕ crear presupuesto' || cmd === '🎙️ grabar nota de voz') {
+    await sendMessage(
+      chatId,
+      `Mandame una <b>nota de voz</b> contando el presupuesto. ` + `Te paso el link al editor en unos segundos. 🎙️`,
+      CREATE_BUTTON_KEYBOARD
+    ).catch(() => {});
+    return;
+  }
+
+  if (cmd === '/quotes' || cmd === '📋 mis presupuestos') {
     await listRecentQuotes(chatId, telegramUserId);
     return;
   }
 
-  if (cmd === '/help') {
-    await sendMessage(
-      chatId,
-      `<b>Cómo usar VoiceQuote</b>\n\n` +
-        `1. Mandame una <b>nota de voz</b> con los items del presupuesto.\n` +
-        `2. Yo te paso un link para revisar y editar.\n` +
-        `3. Cuando esté bien, hacé click en "Compartir" dentro del editor.\n` +
-        `4. El link público lo mandás a tu cliente por WhatsApp.\n` +
-        `5. Tu cliente acepta, rechaza o pide cambios con un click. Te aviso a vos.\n\n` +
-        `<b>Comandos:</b>\n/start — bienvenida\n/quotes — tus últimos presupuestos\n/help — este mensaje`,
-      { inline_keyboard: [[{ text: '🌐 Abrir la app', url: `${WEB_URL}/` }]] }
-    ).catch(() => {});
+  if (cmd === '/stats' || cmd === '📊 stats') {
+    await showStats(chatId, telegramUserId);
+    return;
+  }
+
+  if (cmd === '/profile' || cmd === '👤 mi perfil') {
+    await showProfile(chatId, telegramUserId);
+    return;
+  }
+
+  if (cmd === '/help' || cmd === '❓ ayuda') {
+    await sendHelp(chatId);
     return;
   }
 
@@ -187,15 +206,10 @@ async function showWelcome(chatId: number, telegramUserId?: number) {
   await sendMessage(
     chatId,
     `👋 <b>¡Hola! Soy VoiceQuote.</b>\n\n` +
-      `<b>Mandame una nota de voz</b> contándome qué presupuesto querés hacer, y yo te armo el presupuesto editable + el link para mandarle a tu cliente.\n\n` +
-      `Tip: hablá natural. Si mencionás varias tareas, las separo en items automáticamente. Los precios los completás vos después en el editor.` +
+      `<b>Tocá un botón o mandame una nota de voz</b> para armar un presupuesto. Yo te paso el link editable para tu cliente.\n\n` +
+      `Tip: hablá natural. Separo en items automáticamente y vos completás los precios en el editor.` +
       latestQuoteText,
-    {
-      inline_keyboard: [
-        [{ text: '📋 Ver mis presupuestos', callback_data: 'list_quotes' }],
-        [{ text: '❓ Cómo funciona', callback_data: 'help' }],
-      ],
-    }
+    MAIN_MENU_KEYBOARD
   ).catch(() => {});
 }
 
@@ -210,7 +224,7 @@ async function listRecentQuotes(chatId: number, telegramUserId: number) {
     await sendMessage(
       chatId,
       `📋 Todavía no tenés presupuestos. Mandame una nota de voz y empezamos.`,
-      { inline_keyboard: [[{ text: '🎙️ Grabar nota de voz', callback_data: 'record_voice' }]] }
+      CREATE_BUTTON_KEYBOARD
     ).catch(() => {});
     return;
   }
@@ -226,7 +240,7 @@ async function listRecentQuotes(chatId: number, telegramUserId: number) {
     await sendMessage(
       chatId,
       `📋 Todavía no tenés presupuestos. Mandame una nota de voz y empezamos.`,
-      { inline_keyboard: [[{ text: '🎙️ Grabar nota de voz', callback_data: 'record_voice' }]] }
+      CREATE_BUTTON_KEYBOARD
     ).catch(() => {});
     return;
   }
@@ -265,6 +279,113 @@ async function listRecentQuotes(chatId: number, telegramUserId: number) {
     chatId,
     `📋 <b>Tus últimos ${quotes.length} presupuestos</b>\n\nTocá uno para abrirlo:`,
     { inline_keyboard: buttons }
+  ).catch(() => {});
+}
+
+async function sendHelp(chatId: number) {
+  await sendMessage(
+    chatId,
+    `<b>Cómo usar VoiceQuote</b>\n\n` +
+      `1. Tocá <b>🎙️ Grabar nota de voz</b> y mandame el audio con los items.\n` +
+      `2. Yo te paso el link para revisar y editar.\n` +
+      `3. Cuando esté listo, compartilo desde el editor.\n` +
+      `4. Tu cliente abre el link y acepta, rechaza o pide cambios.\n` +
+      `5. Te aviso por acá.\n\n` +
+      `<b>Comandos:</b>\n/start — bienvenida\n/quotes — tus presupuestos\n/stats — tus números\n/profile — tu perfil\n/help — este mensaje`,
+    MAIN_MENU_KEYBOARD
+  ).catch(() => {});
+}
+
+async function showStats(chatId: number, telegramUserId: number) {
+  const { data: contractor } = await supabase
+    .from('contractors')
+    .select('id')
+    .eq('telegram_user_id', telegramUserId)
+    .single();
+
+  if (!contractor) {
+    await sendMessage(
+      chatId,
+      `📊 Todavía no tenés estadísticas. Mandame una nota de voz y empezamos.`,
+      CREATE_BUTTON_KEYBOARD
+    ).catch(() => {});
+    return;
+  }
+
+  const { data: quotes, error } = await supabase
+    .from('quotes')
+    .select('status, client_response, is_active')
+    .eq('contractor_id', contractor.id);
+
+  if (error) {
+    await sendMessage(chatId, `❌ No pude cargar tus estadísticas. Probá de nuevo.`, MAIN_MENU_KEYBOARD).catch(
+      () => {}
+    );
+    return;
+  }
+
+  const all = quotes || [];
+  const shared = all.filter((q) => q.status === 'shared').length;
+  const accepted = all.filter((q) => q.client_response === 'accepted').length;
+  const rejected = all.filter((q) => q.client_response === 'rejected').length;
+  const pending = all.filter((q) => q.client_response === 'pending' && q.status === 'shared').length;
+  const changesRequested = all.filter((q) => q.client_response === 'changes_requested').length;
+  const rate = shared > 0 ? Math.round((accepted / shared) * 100) : 0;
+
+  await sendMessage(
+    chatId,
+    `📊 <b>Tus números</b>\n\n` +
+      `📤 Enviados / compartidos: <b>${shared}</b>\n` +
+      `✅ Aceptados: <b>${accepted}</b> (${rate}%)\n` +
+      `⏳ Pendientes: <b>${pending}</b>\n` +
+      `❌ Rechazados: <b>${rejected}</b>\n` +
+      `💬 Cambios pedidos: <b>${changesRequested}</b>`,
+    {
+      inline_keyboard: [[{ text: '📋 Ver presupuestos', callback_data: 'list_quotes' }]],
+    }
+  ).catch(() => {});
+}
+
+async function showProfile(chatId: number, telegramUserId: number) {
+  const { data: contractor } = await supabase
+    .from('contractors')
+    .select('id')
+    .eq('telegram_user_id', telegramUserId)
+    .single();
+
+  if (!contractor) {
+    await sendMessage(
+      chatId,
+      `👤 Tu perfil se habilita después del primer presupuesto. Mandame una nota de voz y lo creamos.`,
+      CREATE_BUTTON_KEYBOARD
+    ).catch(() => {});
+    return;
+  }
+
+  const { data: latest } = await supabase
+    .from('quotes')
+    .select('id, edit_token')
+    .eq('contractor_id', contractor.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latest?.edit_token) {
+    const profileUrl = `${WEB_URL}/p/${contractor.id}?t=${latest.edit_token}`;
+    await sendMessage(
+      chatId,
+      `👤 <b>Tu perfil</b>\n\nEditá tu nombre de empresa, logo y contacto para que los presupuestos se vean profesionales.`,
+      {
+        inline_keyboard: [[{ text: '✏️ Editar perfil', url: profileUrl }]],
+      }
+    ).catch(() => {});
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `👤 Tu perfil se habilita después del primer presupuesto. Mandame una nota de voz y lo creamos.`,
+    CREATE_BUTTON_KEYBOARD
   ).catch(() => {});
 }
 
@@ -375,6 +496,14 @@ async function handleVoiceNote(
       const { error: iErr } = await supabase.from('quote_items').insert(rows);
       if (iErr) throw iErr;
     }
+
+    trackEvent({
+      event_type: 'quote_created',
+      contractor_id: contractorId,
+      quote_id: quote.id,
+      slug,
+      metadata: { source: 'telegram_voice', items_count: itemsNormalized.length },
+    });
 
     const editUrl = `${WEB_URL}/q/${quote.id}?t=${quote.edit_token}`;
     const client = quoteJson.client_name || 'tu cliente';

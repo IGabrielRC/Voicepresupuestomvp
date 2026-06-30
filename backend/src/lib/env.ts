@@ -15,4 +15,7 @@ export const env = {
   TELEGRAM_BOT_TOKEN: required('TELEGRAM_BOT_TOKEN'),
   WEB_BASE_URL: process.env.WEB_BASE_URL || 'http://localhost:5173',
   WEBHOOK_SECRET: process.env.WEBHOOK_SECRET || '',
+  // Optional admin secret for the analytics summary endpoint.
+  // If unset, GET /api/admin/analytics/summary returns 503 disabled.
+  ADMIN_TOKEN: process.env.ADMIN_TOKEN || '',
 };

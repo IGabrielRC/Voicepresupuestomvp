@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase.js';
+import { trackEvent } from '../lib/analytics.js';
 import { computeContractorStats } from '../services/quotes.js';
 
 export const contractorsRouter = Router();
@@ -142,6 +143,18 @@ contractorsRouter.patch('/contractors/:id/profile', async (req: Request, res: Re
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
+
+  trackEvent({
+    event_type: 'profile_updated',
+    contractor_id: req.params.id,
+    metadata: {
+      has_business_name: !!business_name,
+      has_logo_url: !!logo_url,
+      has_contact_phone: !!contact_phone,
+      has_contact_email: !!contact_email,
+    },
+  });
+
   res.json({ profile: data });
 });
 
