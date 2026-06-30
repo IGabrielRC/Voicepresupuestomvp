@@ -342,7 +342,7 @@ quotesRouter.post('/quotes/:id/share', async (req: Request, res: Response) => {
 
     const { error: uErr } = await supabase
       .from('quotes')
-      .update({ slug: nextSlug, status: 'shared' })
+      .update({ slug: nextSlug, status: 'shared', client_response: 'pending' })
       .eq('id', quote.id);
     if (uErr) return res.status(500).json({ error: uErr.message });
 
