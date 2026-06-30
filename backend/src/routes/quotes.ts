@@ -124,14 +124,19 @@ async function tryReserveSlug(
   quoteId: string,
   slug: string,
   now: string
-): Promise<boolean> {
+): Promise<{ ok: true } | { ok: false; collision: boolean; message: string }> {
   const { error } = await supabase.from('quote_slugs').insert({
     slug,
     quote_id: quoteId,
     is_active: true,
     created_at: now,
   });
-  return !error;
+  if (!error) return { ok: true };
+  return {
+    ok: false,
+    collision: isUniqueViolation(error),
+    message: error.message || 'No se pudo reservar el link público.',
+  };
 }
 
 async function resolveReplacementSlug(
@@ -320,9 +325,12 @@ quotesRouter.post('/quotes/:id/share', async (req: Request, res: Response) => {
     for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
       const candidate = newSlug();
       const reserved = await tryReserveSlug(quote.id, candidate, now);
-      if (reserved) {
+      if (reserved.ok) {
         nextSlug = candidate;
         break;
+      }
+      if (!reserved.collision) {
+        return res.status(500).json({ error: reserved.message });
       }
     }
     if (!nextSlug) {

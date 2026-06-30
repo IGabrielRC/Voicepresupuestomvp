@@ -24,3 +24,6 @@ on conflict (slug) do nothing;
 -- Indexes for the public resolve path.
 create index if not exists idx_quote_slugs_quote_id on quote_slugs(quote_id);
 create index if not exists idx_quote_slugs_is_active on quote_slugs(is_active);
+
+-- Backend service role needs explicit table privileges even though it bypasses RLS.
+grant select, insert, update, delete on table public.quote_slugs to service_role;
