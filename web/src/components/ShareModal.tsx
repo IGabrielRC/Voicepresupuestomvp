@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { X, Copy, Check, Loader2, Share2 } from 'lucide-react';
+import { X, Copy, Check, Loader2, Share2, MessageCircle } from 'lucide-react';
 import { api } from '../lib/api';
+import { buildWhatsAppShareUrl } from '../lib/share';
 
 export default function ShareModal({
   open,
@@ -120,6 +121,15 @@ export default function ShareModal({
               className="mt-3 inline-block text-sm text-indigo-600 hover:underline"
             >
               Abrir en una pestaña nueva →
+            </a>
+            <a
+              href={buildWhatsAppShareUrl(url)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-[#25D366] text-white text-sm font-medium hover:bg-[#128C7E] transition-colors"
+            >
+              <MessageCircle className="w-5 h-5 fill-white" />
+              Compartir por WhatsApp
             </a>
           </div>
         )}
