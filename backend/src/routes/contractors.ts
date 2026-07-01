@@ -163,6 +163,6 @@ contractorsRouter.patch('/contractors/:id/profile', async (req: Request, res: Re
 contractorsRouter.get('/contractors/by-telegram/:tg_id', async (req: Request, res: Response) => {
   return res.status(410).json({
     error: 'history_disabled',
-    message: 'Por seguridad, abrí tus presupuestos desde el bot de Telegram con /quotes.',
+    message: 'Por seguridad, abre tus presupuestos desde el bot de Telegram con /quotes.',
   });
 });

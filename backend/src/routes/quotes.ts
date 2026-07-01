@@ -197,13 +197,13 @@ quotesRouter.patch('/quotes/:id', async (req: Request, res: Response) => {
   if (current?.is_active === false) {
     return res.status(403).json({
       error: 'quote_archived',
-      message: 'Este presupuesto está archivado. Creá uno nuevo si necesitás hacer cambios.',
+      message: 'Este presupuesto está archivado. Crea uno nuevo si necesitas hacer cambios.',
     });
   }
   if (current?.client_response === 'accepted') {
     return res.status(403).json({
       error: 'quote_locked',
-      message: 'Este presupuesto ya fue aceptado por el cliente. Creá uno nuevo si necesitás hacer cambios.',
+      message: 'Este presupuesto ya fue aceptado por el cliente. Crea uno nuevo si necesitas hacer cambios.',
     });
   }
 
@@ -631,7 +631,7 @@ quotesRouter.post('/quotes/slug/:slug/respond', async (req: Request, res: Respon
     try {
       await sendMessage(
         telegramUserId,
-        `${verb} tu presupuesto, <b>${escapeHtml(clientName)}</b>.\n\nTocá un botón:`,
+        `${verb} tu presupuesto, <b>${escapeHtml(clientName)}</b>.\n\nToca un botón:`,
         {
           inline_keyboard: [
             [{ text: '📝 Ver y editar', url: editUrl }],

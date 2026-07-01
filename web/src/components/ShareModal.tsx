@@ -68,7 +68,7 @@ export default function ShareModal({
           <div className="text-center py-4">
             <p className="text-sm text-slate-600 mb-4">
               Al compartir, el presupuesto pasa a estado "compartido" y se genera un link
-              público que podés mandarle a tu cliente.
+              público que puedes enviarle a tu cliente.
             </p>
             <button
               onClick={load}

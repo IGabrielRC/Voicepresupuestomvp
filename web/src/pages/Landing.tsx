@@ -43,7 +43,7 @@ export default function Landing() {
             <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shadow-sm">
               <Mic className="w-4 h-4 text-white" />
             </div>
-            <span className="font-semibold text-slate-900">VoiceQuote</span>
+            <span className="font-semibold text-slate-900">PresupuestoYA</span>
           </div>
           <span className="text-xs text-slate-500 inline-flex items-center gap-1">
             <Sparkles className="w-3 h-3" /> MVP
@@ -64,7 +64,7 @@ export default function Landing() {
             <span className="text-indigo-600">listos en 30 segundos.</span>
           </h1>
           <p className="mt-7 text-lg sm:text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            Mandá una nota de voz a tu bot de Telegram. Recibí un presupuesto
+            Envía una nota de voz a tu bot de Telegram. Recibe un presupuesto
             editable para compartir con tu cliente.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row gap-3 justify-center">
@@ -94,7 +94,7 @@ export default function Landing() {
             </div>
           )}
           <p className="mt-3 text-xs text-slate-500">
-            Sin registro. Sin tarjeta. Probá ahora.
+            Sin registro. Sin tarjeta. Prueba ahora.
           </p>
         </div>
 
@@ -105,7 +105,7 @@ export default function Landing() {
               <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-200">
                 {[
                   { icon: Mic, label: 'Voz', desc: '"Para Juan Pérez, dos metros de durlock a 50 dólares..."' },
-                  { icon: Edit3, label: 'Editor', desc: 'Revisás items, precios, términos' },
+                  { icon: Edit3, label: 'Editor', desc: 'Revisas items, precios, términos' },
                   { icon: CheckCircle2, label: 'Cliente acepta', desc: 'Con un click desde el celular' },
                 ].map((s, i) => (
                   <div key={i} className="p-5 sm:p-6 text-center">
@@ -134,20 +134,20 @@ export default function Landing() {
           {[
             {
               icon: Mic,
-              title: '1. Hablá',
-              desc: 'Grabá una nota de voz contándonos qué querés presupuestar. Hablá natural, como le hablarías a un compañero.',
+              title: '1. Habla',
+              desc: 'Graba una nota de voz contándonos qué quieres presupuestar. Habla natural, como le hablarías a un compañero.',
               color: 'bg-slate-100 text-slate-700',
             },
             {
               icon: Edit3,
-              title: '2. Editá',
-              desc: 'Ajustá items, cantidades, precios y términos. Se guarda solo cada 5 segundos. Sin apretar nada.',
+              title: '2. Edita',
+              desc: 'Ajusta items, cantidades, precios y términos. Se guarda solo cada 5 segundos. Sin apretar nada.',
               color: 'bg-slate-100 text-slate-700',
             },
             {
               icon: Share2,
               title: '3. Tu cliente decide',
-              desc: 'Compartí el link por WhatsApp. Tu cliente acepta, pide cambios o rechaza con un click. Te llega todo a Telegram.',
+              desc: 'Comparte el link por WhatsApp. Tu cliente acepta, pide cambios o rechaza con un click. Te llega todo a Telegram.',
               color: 'bg-slate-100 text-slate-700',
             },
           ].map((s, i) => (
@@ -169,18 +169,18 @@ export default function Landing() {
       <section className="max-w-5xl mx-auto px-6 py-20 border-t border-slate-200/60">
         <div className="max-w-3xl mx-auto">
           <h2 className="text-3xl sm:text-4xl font-semibold text-slate-900 tracking-[-0.02em] text-center">
-            Por qué VoiceQuote
+            Por qué PresupuestoYA
           </h2>
           <p className="mt-3 text-slate-600 text-center">
-            Lo que ganás vs. el Excel + WhatsApp de siempre.
+            Lo que ganas vs. el Excel + WhatsApp de siempre.
           </p>
           <Card className="mt-10 border-slate-200/60 shadow-none">
             <CardContent className="p-6 sm:p-8">
               <ul className="space-y-5">
                 {[
                   {
-                    title: 'Ahorrás 2-4 horas por presupuesto',
-                    desc: 'De tipear items en Excel, calcular totales, mandar por WhatsApp. Lo hacés hablando, en 30 segundos.',
+                    title: 'Ahorras 2-4 horas por presupuesto',
+                    desc: 'De tipear items en Excel, calcular totales, mandar por WhatsApp. Lo haces hablando, en 30 segundos.',
                   },
                   {
                     title: 'Tu cliente recibe algo profesional',
@@ -191,8 +191,8 @@ export default function Landing() {
                     desc: 'Aceptar, rechazar o pedir cambios con un click desde el celular. Te llega todo a Telegram.',
                   },
                   {
-                    title: 'Funciona desde Telegram, que ya usás',
-                    desc: 'No hay app nueva, no hay login, no hay onboarding. Ya sabés mandar notas de voz.',
+                    title: 'Funciona desde Telegram, que ya usas',
+                    desc: 'No hay app nueva, no hay login, no hay onboarding. Ya sabes mandar notas de voz.',
                   },
                 ].map((b, i) => (
                   <li key={i} className="flex gap-3">
@@ -217,11 +217,11 @@ export default function Landing() {
           <CardContent className="p-8 sm:p-12 text-center">
             <Clock className="w-10 h-10 mx-auto mb-4 opacity-70" />
             <h2 className="text-3xl sm:text-4xl font-semibold tracking-[-0.02em]">
-              Probá gratis. Sin registro.
+              Prueba gratis. Sin registro.
             </h2>
             <p className="mt-3 text-slate-300 max-w-md mx-auto leading-relaxed">
-              Mandá una nota de voz ahora y en 30 segundos tenés tu primer presupuesto listo
-              para mandarle a un cliente.
+              Envía una nota de voz ahora y en 30 segundos tienes tu primer presupuesto listo
+              para enviarle a un cliente.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
               <Button
@@ -254,7 +254,7 @@ export default function Landing() {
             <div className="w-6 h-6 rounded-md bg-indigo-600 flex items-center justify-center">
               <Mic className="w-3 h-3 text-white" />
             </div>
-            <span className="text-sm font-medium text-slate-700">VoiceQuote</span>
+            <span className="text-sm font-medium text-slate-700">PresupuestoYA</span>
           </div>
           <p className="text-xs text-slate-500 inline-flex items-center gap-1.5">
             <MessageSquare className="w-3 h-3" />

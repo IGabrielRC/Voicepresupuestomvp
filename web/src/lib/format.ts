@@ -1,7 +1,7 @@
 export function formatCurrency(value: number, currency: string): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '';
   try {
-    return new Intl.NumberFormat('es-AR', {
+    return new Intl.NumberFormat('es-VE', {
       style: 'currency',
       currency,
       maximumFractionDigits: 2,
@@ -15,7 +15,7 @@ export function formatDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
+  return d.toLocaleDateString('es-VE', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
 export function isExpired(iso: string | null | undefined): boolean {

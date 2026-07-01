@@ -19,7 +19,7 @@ export default function History() {
             Tus presupuestos
           </h1>
           <p className="mt-2 text-slate-600">
-            Acá vas a ver los presupuestos que generes con tu bot.
+            Aquí vas a ver los presupuestos que generes con tu bot.
           </p>
         </div>
 
@@ -28,9 +28,9 @@ export default function History() {
             <div className="w-12 h-12 rounded-full bg-slate-100 mx-auto flex items-center justify-center mb-4">
               <Sparkles className="w-6 h-6 text-slate-700" />
             </div>
-            <h2 className="text-lg font-semibold text-slate-900">Abrí tus presupuestos desde Telegram</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Abre tus presupuestos desde Telegram</h2>
             <p className="mt-2 text-sm text-slate-600 max-w-md mx-auto">
-              Por seguridad, esta página se accede desde el bot. Usá el comando{' '}
+              Por seguridad, esta página se accede desde el bot. Usa el comando{' '}
               <span className="font-mono text-slate-800 bg-slate-100 px-1 rounded">/quotes</span>{' '}
               en Telegram y te mostramos tu lista actualizada.
             </p>

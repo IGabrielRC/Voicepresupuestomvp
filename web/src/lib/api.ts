@@ -8,7 +8,7 @@ async function parseError(res: Response): Promise<string> {
   const text = await res.text();
   if (!text) return `Error ${res.status}`;
   if (text.trim().startsWith('<')) {
-    return `Error ${res.status} del servidor. Probá de nuevo en unos segundos.`;
+    return `Error ${res.status} del servidor. Prueba de nuevo en unos segundos.`;
   }
   try {
     const parsed = JSON.parse(text);

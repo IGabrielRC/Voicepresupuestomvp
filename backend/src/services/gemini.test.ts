@@ -40,7 +40,7 @@ test('parseQuoteJson preserves unit_price: null', () => {
 });
 
 test('parseQuoteJson extracts JSON from markdown wrapper', () => {
-  const raw = 'Aquí tenés:\n```json\n{"items":[{"description":"Test","qty":2,"unit_price":100}]}\n```';
+  const raw = 'Aquí tienes:\n```json\n{"items":[{"description":"Test","qty":2,"unit_price":100}]}\n```';
 
   const result = parseQuoteJson(raw);
 

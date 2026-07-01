@@ -44,7 +44,7 @@ const RESPONSE_BADGE: Record<
   },
   rejected: {
     icon: XCircle,
-    label: 'Tu cliente RECHAZÓ este presupuesto. Editá y volvé a compartir.',
+    label: 'Tu cliente RECHAZÓ este presupuesto. Edita y vuelve a compartir.',
     className: 'bg-red-50 border-red-200 text-red-800',
   },
   changes_requested: {
@@ -181,8 +181,8 @@ export default function Editor({ quoteId }: { quoteId: string }) {
         raw.includes('429') || raw.toLowerCase().includes('too_many_requests');
       const message =
         is429
-          ? 'Demasiados guardados seguidos. Esperá unos segundos y probá de nuevo.'
-          : raw || 'No se pudo guardar. Probá de nuevo.';
+          ? 'Demasiados guardados seguidos. Espera unos segundos y prueba de nuevo.'
+          : raw || 'No se pudo guardar. Prueba de nuevo.';
       setSaveError(message);
       window.setTimeout(() => {
         setSaveError((current) => (current === message ? null : current));
@@ -368,7 +368,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
               </Button>
             </div>
             <p className="mt-5 text-xs text-slate-400">
-              Tu bot está en <span className="font-mono">@presupuestomvp_bot</span>. Mandale una nota de voz con el nuevo presupuesto.
+              Tu bot está en <span className="font-mono">@presupuestomvp_bot</span>. Envíale una nota de voz con el nuevo presupuesto.
             </p>
           </CardContent>
         </Card>
@@ -458,7 +458,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
                 {autoSavedAt && !saving && !saved && (
                   <span className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full">
                     <Check className="w-3.5 h-3.5" />
-                    Guardado {autoSavedAt.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                    Guardado {autoSavedAt.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 )}
                 <Button
@@ -504,7 +504,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
           <div className="rounded-xl border p-4 flex items-center gap-3 transition-colors bg-slate-50 border-slate-200 text-slate-800">
             <Lock className="w-5 h-5 flex-shrink-0" />
             <p className="font-medium tracking-tight">
-              Este presupuesto está archivado. Usá el nuevo presupuesto generado al compartir.
+              Este presupuesto está archivado. Usa el nuevo presupuesto generado al compartir.
             </p>
           </div>
         )}
@@ -872,7 +872,7 @@ export default function Editor({ quoteId }: { quoteId: string }) {
             </div>
             <AlertDialogTitle className="text-center">¿Eliminar este ítem?</AlertDialogTitle>
             <AlertDialogDescription className="text-center">
-              Se quitará del presupuesto. Podés deshacer cerrando sin guardar.
+              Se quitará del presupuesto. Puedes deshacer cerrando sin guardar.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

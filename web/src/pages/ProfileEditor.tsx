@@ -105,7 +105,7 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
       img.onerror = () => {
         clearTimeout(timer);
         resolve(
-          'No se pudo cargar la imagen. Revisá que el enlace sea público y sea una imagen.'
+          'No se pudo cargar la imagen. Revisa que el enlace sea público y sea una imagen.'
         );
       };
 
@@ -184,7 +184,7 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
         setUrlCheck({
           status: 'invalid',
           error:
-            'No se pudo cargar la imagen. Revisá que el enlace sea público y sea una imagen.',
+            'No se pudo cargar la imagen. Revisa que el enlace sea público y sea una imagen.',
         });
       };
       img.src = value;
@@ -224,7 +224,7 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
 
   async function save() {
     if (!editToken) {
-      setError('No se puede guardar: falta el token de edición. Abrí el perfil desde el enlace de un presupuesto.');
+      setError('No se puede guardar: falta el token de edición. Abre el perfil desde el enlace de un presupuesto.');
       return;
     }
     const value = profile.logo_url || '';
@@ -245,7 +245,7 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
         }
         setUrlCheck({ status: 'valid', error: null });
         if (profile.logo_url !== value) {
-          setLogoError('El logo cambió mientras se verificaba. Volvé a guardar.');
+          setLogoError('El logo cambió mientras se verificaba. Vuelve a guardar.');
           return;
         }
       }
@@ -305,7 +305,7 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
           <button
             onClick={save}
             disabled={saving || !canEdit}
-            title={canEdit ? 'Guardar cambios' : 'Abrí el perfil desde el enlace de un presupuesto para poder editar'}
+            title={canEdit ? 'Guardar cambios' : 'Abre el perfil desde el enlace de un presupuesto para poder editar'}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
             {saving ? (
@@ -328,9 +328,9 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
                 <Sparkles className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">¡Bienvenido a VoiceQuote!</h2>
+                <h2 className="text-lg font-semibold text-slate-900">¡Bienvenido a PresupuestoYA!</h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Configurá tu perfil con los datos de tu empresa. Después cada
+                  Configura tu perfil con los datos de tu empresa. Después cada
                   presupuesto que generes se va a ver profesional con tu nombre,
                   logo y contacto.
                 </p>
@@ -342,12 +342,12 @@ export default function ProfileEditor({ contractorId }: { contractorId: string }
           Mi perfil
         </h1>
         <p className="text-sm text-slate-600 mb-8">
-          Aparece en cada presupuesto que compartís con tus clientes.
+          Aparece en cada presupuesto que compartes con tus clientes.
         </p>
 
         {!canEdit && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            Este perfil se abrió en modo solo lectura. Para editarlo, usá el enlace
+            Este perfil se abrió en modo solo lectura. Para editarlo, usa el enlace
             “Editar mi perfil de empresa” desde un presupuesto o desde el bot de Telegram.
           </div>
         )}

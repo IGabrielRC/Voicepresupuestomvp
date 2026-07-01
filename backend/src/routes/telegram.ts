@@ -118,7 +118,7 @@ async function handleCallbackQuery(callbackQuery: any) {
   if (data === 'create_new' || data === 'record_voice') {
     await sendMessage(
       chatId,
-      `Mandame una <b>nota de voz</b> contando el presupuesto. ` +
+      `Envíame una <b>nota de voz</b> contando el presupuesto. ` +
         `Te paso el link al editor en unos segundos. 🎙️`,
       CREATE_BUTTON_KEYBOARD
     ).catch(() => {});
@@ -137,7 +137,7 @@ async function handleTextCommand(chatId: number, telegramUserId: number, text: s
   if (cmd === '➕ crear presupuesto' || cmd === '🎙️ grabar nota de voz') {
     await sendMessage(
       chatId,
-      `Mandame una <b>nota de voz</b> contando el presupuesto. ` + `Te paso el link al editor en unos segundos. 🎙️`,
+      `Envíame una <b>nota de voz</b> contando el presupuesto. ` + `Te paso el link al editor en unos segundos. 🎙️`,
       CREATE_BUTTON_KEYBOARD
     ).catch(() => {});
     return;
@@ -205,9 +205,9 @@ async function showWelcome(chatId: number, telegramUserId?: number) {
 
   await sendMessage(
     chatId,
-    `👋 <b>¡Hola! Soy VoiceQuote.</b>\n\n` +
-      `<b>Tocá un botón o mandame una nota de voz</b> para armar un presupuesto. Yo te paso el link editable para tu cliente.\n\n` +
-      `Tip: hablá natural. Separo en items automáticamente y vos completás los precios en el editor.` +
+    `👋 <b>¡Hola! Soy PresupuestoYA.</b>\n\n` +
+      `<b>Toca un botón o envíame una nota de voz</b> para armar un presupuesto. Yo te paso el link editable para tu cliente.\n\n` +
+      `Tip: habla natural. Separo en items automáticamente y tú completas los precios en el editor.` +
       latestQuoteText,
     MAIN_MENU_KEYBOARD
   ).catch(() => {});
@@ -223,7 +223,7 @@ async function listRecentQuotes(chatId: number, telegramUserId: number) {
   if (!contractor) {
     await sendMessage(
       chatId,
-      `📋 Todavía no tenés presupuestos. Mandame una nota de voz y empezamos.`,
+      `📋 Todavía no tienes presupuestos. Envíame una nota de voz y empezamos.`,
       CREATE_BUTTON_KEYBOARD
     ).catch(() => {});
     return;
@@ -239,7 +239,7 @@ async function listRecentQuotes(chatId: number, telegramUserId: number) {
   if (!quotes || quotes.length === 0) {
     await sendMessage(
       chatId,
-      `📋 Todavía no tenés presupuestos. Mandame una nota de voz y empezamos.`,
+      `📋 Todavía no tienes presupuestos. Envíame una nota de voz y empezamos.`,
       CREATE_BUTTON_KEYBOARD
     ).catch(() => {});
     return;
@@ -261,7 +261,7 @@ async function listRecentQuotes(chatId: number, telegramUserId: number) {
     const icon = statusIcon[q.status] || '📄';
     const ri = responseIcon[q.client_response] || '';
     const riSuffix = ri ? ` ${ri}` : '';
-    const dateStr = new Date(q.created_at).toLocaleDateString('es-AR', {
+    const dateStr = new Date(q.created_at).toLocaleDateString('es-VE', {
       day: '2-digit',
       month: '2-digit',
     });
@@ -273,11 +273,11 @@ async function listRecentQuotes(chatId: number, telegramUserId: number) {
     ];
   });
 
-  buttons.push([{ text: '➕ Crear nuevo (mandame un audio)', callback_data: 'create_new' }]);
+  buttons.push([{ text: '➕ Crear nuevo (envíame un audio)', callback_data: 'create_new' }]);
 
   await sendMessage(
     chatId,
-    `📋 <b>Tus últimos ${quotes.length} presupuestos</b>\n\nTocá uno para abrirlo:`,
+    `📋 <b>Tus últimos ${quotes.length} presupuestos</b>\n\nToca uno para abrirlo:`,
     { inline_keyboard: buttons }
   ).catch(() => {});
 }
@@ -285,12 +285,12 @@ async function listRecentQuotes(chatId: number, telegramUserId: number) {
 async function sendHelp(chatId: number) {
   await sendMessage(
     chatId,
-    `<b>Cómo usar VoiceQuote</b>\n\n` +
-      `1. Tocá <b>🎙️ Grabar nota de voz</b> y mandame el audio con los items.\n` +
+    `<b>Cómo usar PresupuestoYA</b>\n\n` +
+      `1. Toca <b>🎙️ Grabar nota de voz</b> y envíame el audio con los items.\n` +
       `2. Yo te paso el link para revisar y editar.\n` +
-      `3. Cuando esté listo, compartilo desde el editor.\n` +
+      `3. Cuando esté listo, compártelo desde el editor.\n` +
       `4. Tu cliente abre el link y acepta, rechaza o pide cambios.\n` +
-      `5. Te aviso por acá.\n\n` +
+      `5. Te aviso por aquí.\n\n` +
       `<b>Comandos:</b>\n/start — bienvenida\n/quotes — tus presupuestos\n/stats — tus números\n/profile — tu perfil\n/help — este mensaje`,
     MAIN_MENU_KEYBOARD
   ).catch(() => {});
@@ -306,7 +306,7 @@ async function showStats(chatId: number, telegramUserId: number) {
   if (!contractor) {
     await sendMessage(
       chatId,
-      `📊 Todavía no tenés estadísticas. Mandame una nota de voz y empezamos.`,
+      `📊 Todavía no tienes estadísticas. Envíame una nota de voz y empezamos.`,
       CREATE_BUTTON_KEYBOARD
     ).catch(() => {});
     return;
@@ -318,7 +318,7 @@ async function showStats(chatId: number, telegramUserId: number) {
     .eq('contractor_id', contractor.id);
 
   if (error) {
-    await sendMessage(chatId, `❌ No pude cargar tus estadísticas. Probá de nuevo.`, MAIN_MENU_KEYBOARD).catch(
+    await sendMessage(chatId, `❌ No pude cargar tus estadísticas. Prueba de nuevo.`, MAIN_MENU_KEYBOARD).catch(
       () => {}
     );
     return;
@@ -356,7 +356,7 @@ async function showProfile(chatId: number, telegramUserId: number) {
   if (!contractor) {
     await sendMessage(
       chatId,
-      `👤 Tu perfil se habilita después del primer presupuesto. Mandame una nota de voz y lo creamos.`,
+      `👤 Tu perfil se habilita después del primer presupuesto. Envíame una nota de voz y lo creamos.`,
       CREATE_BUTTON_KEYBOARD
     ).catch(() => {});
     return;
@@ -374,7 +374,7 @@ async function showProfile(chatId: number, telegramUserId: number) {
     const profileUrl = `${WEB_URL}/p/${contractor.id}?t=${latest.edit_token}`;
     await sendMessage(
       chatId,
-      `👤 <b>Tu perfil</b>\n\nEditá tu nombre de empresa, logo y contacto para que los presupuestos se vean profesionales.`,
+      `👤 <b>Tu perfil</b>\n\nEdita tu nombre de empresa, logo y contacto para que los presupuestos se vean profesionales.`,
       {
         inline_keyboard: [[{ text: '✏️ Editar perfil', url: profileUrl }]],
       }
@@ -384,7 +384,7 @@ async function showProfile(chatId: number, telegramUserId: number) {
 
   await sendMessage(
     chatId,
-    `👤 Tu perfil se habilita después del primer presupuesto. Mandame una nota de voz y lo creamos.`,
+      `👤 Tu perfil se habilita después del primer presupuesto. Envíame una nota de voz y lo creamos.`,
     CREATE_BUTTON_KEYBOARD
   ).catch(() => {});
 }
@@ -417,7 +417,7 @@ async function handleVoiceNote(
       }
       await sendMessage(
         chatId,
-        `❌ <b>No pude procesar el audio.</b>\n\nProbá de nuevo o mandá los datos por texto. Si sigue fallando, el audio puede tener mucho ruido.`
+        `❌ <b>No pude procesar el audio.</b>\n\nPrueba de nuevo o envía los datos por texto. Si sigue fallando, el audio puede tener mucho ruido.`
       ).catch(() => {});
       return;
     }
@@ -516,10 +516,10 @@ async function handleVoiceNote(
         ? `✅ <b>Listo, armé el presupuesto para ${escapeHtml(client)}.</b>\n\n` +
           `📋 ${itemsLabel}.\n` +
           `⚠️ ${missingByItem.length === 1 ? '1 item necesita' : `${missingByItem.length} items necesitan`} que completes el precio.\n\n` +
-          `Tocá el botón para revisar:`
+          `Toca el botón para revisar:`
         : `✅ <b>Listo, armé el presupuesto para ${escapeHtml(client)}.</b>\n\n` +
           `📋 ${itemsLabel}, todo en orden.\n\n` +
-          `Tocá el botón para revisar y compartir:`;
+          `Toca el botón para revisar y compartir:`;
 
     const replyMarkup = {
       inline_keyboard: [[{ text: '📝 Editar presupuesto', url: editUrl }]],
@@ -552,7 +552,7 @@ async function handleVoiceNote(
       const profileUrl = `${WEB_URL}/p/${contractorId}?welcome=1`;
       await sendMessage(
         chatId,
-        `👤 <b>Mientras tanto, completá tu perfil</b> para que tus presupuestos se vean profesionales (con tu nombre de empresa, logo y contacto).\n\nTocá el botón:`,
+        `👤 <b>Mientras tanto, completa tu perfil</b> para que tus presupuestos se vean profesionales (con tu nombre de empresa, logo y contacto).\n\nToca el botón:`,
         {
           inline_keyboard: [
             [{ text: '👤 Configurar mi perfil', url: profileUrl }],
@@ -567,7 +567,7 @@ async function handleVoiceNote(
     }
     await sendMessage(
       chatId,
-      `❌ <b>Hubo un error procesando tu audio.</b>\n\nProbá de nuevo en unos segundos.`
+      `❌ <b>Hubo un error procesando tu audio.</b>\n\nPrueba de nuevo en unos segundos.`
     ).catch(() => {});
   }
 }

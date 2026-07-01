@@ -50,7 +50,7 @@ function validityText(expiresAt: string | null | undefined, expired: boolean): s
   const now = new Date();
   const isToday = d.toDateString() === now.toDateString();
   if (isToday) return 'Vence hoy';
-  return `Vence el ${d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}`;
+  return `Vence el ${d.toLocaleDateString('es-VE', { day: 'numeric', month: 'short' })}`;
 }
 
 export default function PublicQuote({ slug }: { slug: string }) {
@@ -104,7 +104,7 @@ export default function PublicQuote({ slug }: { slug: string }) {
     const calculatedTotal = items.reduce((s, it) => s + (it.line_total || 0), 0);
     const effectiveTotal = quote.total_override != null ? quote.total_override : calculatedTotal;
     const totalStr = formatCurrency(effectiveTotal, quote.currency);
-    const business = profile?.business_name || 'VoiceQuote';
+    const business = profile?.business_name || 'PresupuestoYA';
     document.title = `Presupuesto para ${quote.client_name || 'cliente'} — ${totalStr} | ${business}`;
 
     function setMeta(property: string, content: string) {
@@ -133,7 +133,7 @@ export default function PublicQuote({ slug }: { slug: string }) {
       setResponse(r);
     } catch (e: any) {
       setResponding(null);
-      alert('No se pudo registrar la respuesta. Intentá de nuevo.');
+      alert('No se pudo registrar la respuesta. Intenta de nuevo.');
     } finally {
       setResponding(null);
     }
@@ -147,7 +147,7 @@ export default function PublicQuote({ slug }: { slug: string }) {
   function shareWhatsapp() {
     const url = encodeURIComponent(window.location.href);
     const text = encodeURIComponent(
-      `Mirá este presupuesto de ${businessName} — Total: ${totalStr}`
+      `Mira este presupuesto de ${businessName} — Total: ${totalStr}`
     );
     window.open(`https://wa.me/?text=${text}%20${url}`, '_blank');
   }
@@ -515,7 +515,7 @@ export default function PublicQuote({ slug }: { slug: string }) {
               <p className="font-semibold">Este presupuesto venció el {formatDate(quote.expires_at)}</p>
             </div>
             <p className="text-sm text-amber-700">
-              Contactá al contratista para pedir una nueva versión.
+              Contacta al contratista para pedir una nueva versión.
             </p>
             {profile?.contact_phone && (
               <a
@@ -567,7 +567,7 @@ export default function PublicQuote({ slug }: { slug: string }) {
             </div>
             <AlertDialogTitle className="text-center">¿Rechazar el presupuesto?</AlertDialogTitle>
             <AlertDialogDescription className="text-center">
-              Si rechazás, se le avisa al contratista por Telegram. Esta acción no se puede deshacer.
+              Si rechazas, se le avisa al contratista por Telegram. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

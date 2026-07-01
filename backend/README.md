@@ -1,4 +1,4 @@
-# VoiceQuote — Backend
+# PresupuestoYA — Backend
 
 Express + TypeScript. Receives voice notes from a Telegram bot, sends them to Gemini, persists a quote in Supabase, and exposes a JSON API for the web editor.
 
@@ -79,7 +79,7 @@ curl -X POST http://localhost:3001/api/test/simulate-voice \
 
 ## What the Gemini prompt assumes
 
-Argentinian Spanish, rioplatense. Tunable in `src/services/gemini.ts`.
+Spanish neutral for Venezuelan contractors. Tunable in `src/services/gemini.ts`.
 
 ## What's NOT here (yet — by design for the MVP)
 
